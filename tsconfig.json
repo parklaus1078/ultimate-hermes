@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/cli/commands/**/*.ts",
+    "src/cli/context.ts",
+    "src/cli/output.ts",
+    "src/server/app.ts",
+    "src/db/approvals.ts",
+    "src/db/audit.ts",
+    "src/db/embeddings.ts",
+    "src/db/events.ts",
+    "src/db/external-refs.ts",
+    "src/db/sources.ts",
+    "src/adapters/google/calendar.ts",
+    "src/adapters/google/drive.ts",
+    "src/adapters/google/gmail.ts",
+    "src/adapters/linear/export.ts",
+    "src/adapters/linear/mapping.ts",
+    "src/adapters/linear/webhook.ts",
+    "src/adapters/notion/export.ts",
+    "src/adapters/notion/import.ts",
+    "src/adapters/notion/mapping.ts"
+  ]
+}

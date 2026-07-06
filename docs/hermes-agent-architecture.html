@@ -1,0 +1,1100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hermes Agent Daily Life Memory Architecture</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #5d6878;
+      --line: #d8dee8;
+      --paper: #ffffff;
+      --wash: #f5f7fa;
+      --wash-2: #edf3f4;
+      --accent: #256f8c;
+      --accent-2: #8a5a22;
+      --green: #1d7a55;
+      --blue: #245f96;
+      --red: #a23b3b;
+      --yellow: #a05a00;
+      --code: #eef2f6;
+      --shadow: rgba(23, 32, 42, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #e8edf1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+      line-height: 1.62;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 32px auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 44px var(--shadow);
+    }
+
+    header {
+      padding: 44px 56px 34px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #ffffff 0%, #f7f9fb 100%);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 900px;
+      font-size: clamp(31px, 4vw, 50px);
+      line-height: 1.14;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 900px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 28px;
+    }
+
+    nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 5px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    main {
+      padding: 0 56px 56px;
+    }
+
+    section {
+      padding: 34px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section:last-child {
+      border-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 26px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul,
+    ol {
+      margin: 10px 0 0 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: var(--code);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 14px 0 0;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #253044;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 16px;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--wash);
+      font-weight: 800;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .summary-item {
+      min-height: 124px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--wash);
+    }
+
+    .summary-item strong {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    .summary-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-left: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      background: #edf6f8;
+    }
+
+    .warning {
+      border-left-color: var(--yellow);
+      background: #fff7e8;
+    }
+
+    .danger {
+      border-left-color: var(--red);
+      background: #fff0f0;
+    }
+
+    .profile-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .profile {
+      min-height: 280px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .profile h3 {
+      margin-top: 0;
+      color: var(--accent-2);
+    }
+
+    .profile p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 12px 0 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--wash);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .tier {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .tier-secondary {
+      color: var(--blue);
+      font-weight: 800;
+    }
+
+    .tier-optional {
+      color: var(--yellow);
+      font-weight: 800;
+    }
+
+    .map {
+      overflow-x: auto;
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .architecture {
+      min-width: 980px;
+      display: grid;
+      grid-template-columns: 150px 1fr 1fr 1fr 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .lane-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 86px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #eaf1f3;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .node {
+      min-height: 86px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .node strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+
+    .node span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .node.critical {
+      border-color: #9dbac4;
+      background: #eef7f9;
+    }
+
+    .node.storage {
+      border-color: #b8c8a4;
+      background: #f4f8ef;
+    }
+
+    .node.guard {
+      border-color: #d6b6a0;
+      background: #fff7ef;
+    }
+
+    .flow-label {
+      margin: 16px 0 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .pipeline {
+      overflow-x: auto;
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--wash);
+    }
+
+    .pipeline svg {
+      display: block;
+      min-width: 960px;
+      width: 100%;
+      height: auto;
+    }
+
+    .box-title {
+      font-weight: 800;
+      fill: #17202a;
+      font-size: 14px;
+    }
+
+    .box-text {
+      fill: #5d6878;
+      font-size: 12px;
+    }
+
+    .source-list {
+      columns: 2;
+      column-gap: 28px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .source-list li {
+      break-inside: avoid;
+    }
+
+    .compact {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .decision {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .decision h3 {
+      margin-top: 0;
+      color: var(--accent);
+    }
+
+    @media (max-width: 900px) {
+      .summary-grid,
+      .profile-grid,
+      .decision-grid {
+        grid-template-columns: 1fr;
+      }
+
+      header,
+      main {
+        padding-left: 26px;
+        padding-right: 26px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        width: 100%;
+        margin: 0;
+        border-left: 0;
+        border-right: 0;
+      }
+
+      header,
+      main {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      header {
+        padding-top: 32px;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+
+      .source-list {
+        columns: 1;
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        width: 100%;
+        margin: 0;
+        border: 0;
+        box-shadow: none;
+      }
+
+      header,
+      main {
+        padding-left: 28px;
+        padding-right: 28px;
+      }
+
+      section,
+      .profile,
+      .decision {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <p class="eyebrow">Hermes Agent Blueprint</p>
+      <h1>Daily Life Memory Assistant Architecture</h1>
+      <p class="subtitle">
+        Hermes Agent를 개인 회사의 운영팀처럼 구성하기 위한 프로필, SaaS 통합, 장기 기억 인프라 아키텍처 제안서입니다.
+        목표는 일정 관리가 아니라, 프로젝트와 인생 사건의 원본 기록, 맥락, 결정 근거, 증거, 회상 가능성을 장기간 보존하는 것입니다.
+      </p>
+      <div class="meta">
+        <span>작성일: 2026-07-06</span>
+        <span>대상: 개인 Mac 중심 운영 + SaaS 연동</span>
+        <span>핵심 원칙: Hermes Ledger가 원장, SaaS는 전문 뷰</span>
+      </div>
+      <nav aria-label="문서 섹션">
+        <a href="#principles">설계 원칙</a>
+        <a href="#profiles">Agent Profiles</a>
+        <a href="#saas">SaaS Integrations</a>
+        <a href="#architecture">Infrastructure</a>
+        <a href="#data-model">Data Model</a>
+        <a href="#roadmap">MVP Roadmap</a>
+      </nav>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <strong>Primary Memory</strong>
+          <span>모든 사건은 Hermes Event Ledger에 먼저 append-only로 기록합니다.</span>
+        </div>
+        <div class="summary-item">
+          <strong>Execution Surface</strong>
+          <span>Linear는 프로젝트, 티켓, 일정, 진행 히스토리의 작업 화면입니다.</span>
+        </div>
+        <div class="summary-item">
+          <strong>Knowledge Surface</strong>
+          <span>Notion은 문서, 결정, 사건, 관계, 증거를 읽기 좋은 inventory로 관리합니다.</span>
+        </div>
+        <div class="summary-item">
+          <strong>Recall Layer</strong>
+          <span>키워드 검색, 의미 검색, 타임라인 재구성으로 과거 맥락을 복원합니다.</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section id="principles">
+        <h2>1. 설계 판단</h2>
+        <p>
+          Hermes Agent는 Notion이나 Linear의 자동화 봇이 아니라, 당신의 장기 기억을 관리하는 상위 운영 계층이어야 합니다.
+          Linear는 실행 상태를 잘 다루고, Notion은 문서와 지식 inventory를 잘 다루지만, 둘 중 하나만 원장으로 삼으면 서비스 변경, 권한 문제, 데이터 누락, 검색 한계에 묶입니다.
+        </p>
+        <div class="callout">
+          <strong>권장 결론:</strong>
+          Hermes 자체에 <code>append-only event ledger</code>를 두고, Linear와 Notion은 각각 프로젝트 실행 뷰와 문서 지식 뷰로 동기화합니다.
+          원본 파일, 이메일, 스크린샷, 계약서, PDF, 커밋, 티켓 변화는 Hermes가 별도 인덱싱해야 합니다.
+        </div>
+
+        <h3>기억 시스템의 핵심 원칙</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>원칙</th>
+              <th>의미</th>
+              <th>구현 방식</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Capture first</td>
+              <td>정리보다 수집이 먼저입니다. 입력이 귀찮으면 시스템은 죽습니다.</td>
+              <td>CLI, 모바일 share sheet, 브라우저 클리퍼, 이메일 라벨, 파일 dropbox를 둡니다.</td>
+            </tr>
+            <tr>
+              <td>Raw before summary</td>
+              <td>LLM 요약은 파생물입니다. 원본이 사라지면 증거 가치와 재검증 가능성이 사라집니다.</td>
+              <td>원본 파일, URL, 이메일 헤더, 스크린샷, 커밋 해시를 변경 불가능한 위치에 보존합니다.</td>
+            </tr>
+            <tr>
+              <td>Timeline as backbone</td>
+              <td>인생 히스토리는 결국 시간순 사건 복원 문제입니다.</td>
+              <td>모든 event에 timestamp, source, actor, related entities, evidence 링크를 강제합니다.</td>
+            </tr>
+            <tr>
+              <td>Approval boundary</td>
+              <td>기록 agent가 임의로 외부 전송, 삭제, 법적 판단, 금전 결정을 하면 안 됩니다.</td>
+              <td>읽기, 쓰기, 외부 발행, 삭제, 민감 문서 접근을 권한 레벨별로 분리합니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="profiles">
+        <h2>2. Hermes Agent Profiles</h2>
+        <p>
+          프로필은 완전 독립 자율 에이전트라기보다, 동일한 Hermes Core 위에서 다른 프롬프트, 도구 권한, 산출물 책임을 가진 역할 단위로 보는 편이 안전합니다.
+          각 프로필은 자신의 업무를 기록하되, 모든 결과를 Event Ledger에 남겨야 합니다.
+        </p>
+
+        <div class="profile-grid">
+          <div class="profile">
+            <h3>Chief of Staff</h3>
+            <p>하루 운영의 지휘자입니다. 오늘 일정, 활성 프로젝트, 막힌 항목, 긴급한 응답, 다음 행동을 하나의 briefing으로 압축합니다.</p>
+            <ul>
+              <li>daily briefing / evening shutdown 생성</li>
+              <li>우선순위 충돌 탐지</li>
+              <li>놓친 follow-up과 약속 추적</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Calendar</span><span class="tag">Linear</span><span class="tag">Notion</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Capture Router</h3>
+            <p>모든 입력을 받아 적절한 저장소와 스키마로 라우팅합니다. 가장 중요한 프로필입니다. capture가 쉬워야 Hermes가 살아남습니다.</p>
+            <ul>
+              <li>빠른 메모, 링크, 파일, 스크린샷 ingest</li>
+              <li>event type, project, tag, sensitivity 자동 분류</li>
+              <li>중복 문서와 기존 사건 연결</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Inbox</span><span class="tag">Classifier</span><span class="tag">Dedupe</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Project Manager</h3>
+            <p>Linear 중심의 실행 관리자입니다. 프로젝트, milestone, ticket, deadline, 상태 변화, blocked reason을 매우 상세하게 관리합니다.</p>
+            <ul>
+              <li>프로젝트별 티켓 생성 및 상태 전이</li>
+              <li>ticket history와 관련 event 연결</li>
+              <li>주간 프로젝트 리뷰와 next action 추천</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Linear</span><span class="tag">Tickets</span><span class="tag">Milestones</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Linear Sync Manager</h3>
+            <p>Hermes와 Linear 사이의 데이터 일관성을 책임지는 adapter 역할입니다. Project Manager와 분리해야 동기화 오류를 통제하기 쉽습니다.</p>
+            <ul>
+              <li>issues, projects, cycles, comments, labels 동기화</li>
+              <li>webhook event를 Hermes event로 정규화</li>
+              <li>Linear ID와 Hermes ID 매핑 유지</li>
+            </ul>
+            <div class="tag-row"><span class="tag">GraphQL</span><span class="tag">Webhooks</span><span class="tag">ID map</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Archivist</h3>
+            <p>Notion 중심의 문서 librarian입니다. 살면서 마주한 문서, 링크, PDF, 논문, 계약서, 회의 메모를 읽기 좋은 inventory로 정리합니다.</p>
+            <ul>
+              <li>문서 database 생성 및 속성 관리</li>
+              <li>원본 파일과 Notion page 연결</li>
+              <li>문서별 요약, 중요도, 재방문 이유 기록</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Notion</span><span class="tag">PDF</span><span class="tag">Docs</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Historian</h3>
+            <p>사건을 시간순으로 복원하는 프로필입니다. 프로젝트 변경, 법적 분쟁 가능 사건, 커리어 결정, 구매 결정의 흐름을 timeline으로 만듭니다.</p>
+            <ul>
+              <li>날짜별 사건 요약</li>
+              <li>관련자, 조직, 문서, 티켓 연결</li>
+              <li>"그때 무슨 일이 있었나" 질문에 답할 timeline 구성</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Timeline</span><span class="tag">Events</span><span class="tag">Recall</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Decision Analyst</h3>
+            <p>왜 그런 결정을 했는지 보존합니다. 기술 선택, 커리어 path, 구매, 계약, 창업/퇴사, 분쟁 대응 같은 결정을 decision record로 만듭니다.</p>
+            <ul>
+              <li>선택지, 판단 기준, trade-off 기록</li>
+              <li>결정 당시 근거와 나중의 결과 분리</li>
+              <li>재검토 날짜와 변경 조건 설정</li>
+            </ul>
+            <div class="tag-row"><span class="tag">ADR</span><span class="tag">Trade-offs</span><span class="tag">Review</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Troubleshooting Analyst</h3>
+            <p>서비스 운영, 버그, 장애, 환경 문제를 재사용 가능한 runbook으로 바꿉니다. 같은 문제를 두 번 풀지 않게 만드는 역할입니다.</p>
+            <ul>
+              <li>증상, 원인 가설, 시도, 결과 기록</li>
+              <li>커밋, 로그, 모니터링 링크 연결</li>
+              <li>재발 방지 action과 runbook 생성</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Incidents</span><span class="tag">Runbooks</span><span class="tag">Logs</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Evidence Clerk</h3>
+            <p>법적 분쟁 가능성이 있는 사건의 원본성과 순서를 보호합니다. 법률 판단자가 아니라, 변호사에게 줄 수 있는 증거 패킷을 준비하는 역할입니다.</p>
+            <ul>
+              <li>원본 파일, 대화, 이메일, 계약서, 입금 기록 보존</li>
+              <li>chain of custody와 hash 기록</li>
+              <li>사실, 추정, 감정, 법률 판단을 분리</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Legal</span><span class="tag">Evidence</span><span class="tag">No deletion</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Research Librarian</h3>
+            <p>논문, 블로그, 문서, 레퍼런스, 기술 리서치를 관리합니다. 읽은 자료를 나중에 다시 찾고 프로젝트 결정과 연결합니다.</p>
+            <ul>
+              <li>논문/문서 metadata 추출</li>
+              <li>핵심 주장, 반론, 적용 가능성 정리</li>
+              <li>관련 프로젝트와 decision record에 연결</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Papers</span><span class="tag">References</span><span class="tag">Citations</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Career Curator</h3>
+            <p>완료한 일에서 이력서, 포트폴리오, 면접 답변, 성과 지표를 추출합니다. 일의 의미를 나중에 설명 가능한 형태로 보존합니다.</p>
+            <ul>
+              <li>성과 후보 문장 생성</li>
+              <li>문제, 행동, 결과, 지표 구조화</li>
+              <li>프로젝트별 brag document 유지</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Resume</span><span class="tag">Portfolio</span><span class="tag">Metrics</span></div>
+          </div>
+
+          <div class="profile">
+            <h3>Security & Privacy Officer</h3>
+            <p>Hermes의 권한, 민감도, 외부 전송, 삭제 금지, 토큰 접근을 감시합니다. 모든 agent action 앞에 policy gate를 둡니다.</p>
+            <ul>
+              <li>민감 문서 분류와 redaction</li>
+              <li>외부 SaaS write 전 approval 요구</li>
+              <li>secrets, .env, credential 접근 차단</li>
+            </ul>
+            <div class="tag-row"><span class="tag">Policy</span><span class="tag">Audit</span><span class="tag">Secrets</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="saas">
+        <h2>3. Integrate 해야 할 SaaS와 기능</h2>
+        <p>
+          SaaS는 Hermes의 대체제가 아니라, Hermes가 연결하는 전문 inventory입니다. 핵심은 "어디에 저장할 것인가"보다 "Hermes가 어떤 사건 ID로 모든 흔적을 연결할 것인가"입니다.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>SaaS / Tool</th>
+              <th>Hermes에서 맡길 기능</th>
+              <th>주요 데이터</th>
+              <th>주의점</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="tier">Core</span></td>
+              <td>Linear</td>
+              <td>프로젝트, 티켓, cycle, milestone, status, priority, comment, blocked reason, due date 관리</td>
+              <td>Issue, Project, Cycle, Comment, Label, Team, Workflow State</td>
+              <td>Hermes Event ID를 Linear issue/comment에 backlink로 남겨야 합니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier">Core</span></td>
+              <td>Notion</td>
+              <td>문서 inventory, 사건 archive, decision record, incident note, person/org database, evidence index</td>
+              <td>Page, Database, Comment, File, View, Relation, Property</td>
+              <td>Notion page는 보기 좋은 뷰입니다. 원본 파일과 ledger는 별도로 보존합니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier">Core</span></td>
+              <td>Google Calendar / Apple Calendar</td>
+              <td>일정, deadline, meeting, 반복 리뷰, follow-up reminder, 실제 시간 사용 기록</td>
+              <td>Event, Attendee, Location, Reminder, Recurrence</td>
+              <td>calendar event와 Hermes event를 연결해 "그날 무슨 일이 있었는지" 복원합니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier">Core</span></td>
+              <td>Google Drive / iCloud Drive / Dropbox</td>
+              <td>PDF, 계약서, 스크린샷, exported chat, receipt, raw evidence의 파일 저장소</td>
+              <td>File, Folder, Metadata, Share Link, File Revision</td>
+              <td>민감 문서는 암호화 vault 또는 접근 제한 폴더로 분리합니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier-secondary">Important</span></td>
+              <td>Gmail / Email</td>
+              <td>중요 메일, 계약/분쟁/영수증/서비스 운영 메일 capture, thread timeline 구성</td>
+              <td>Message, Thread, Label, Header, Attachment</td>
+              <td>전체 inbox ingest보다 라벨 기반 선택 ingest가 안전합니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier-secondary">Important</span></td>
+              <td>GitHub / GitLab</td>
+              <td>커밋, PR, issue, release, code review, incident fix evidence 연결</td>
+              <td>Commit, Pull Request, Issue, Release, Review, Check Run</td>
+              <td>Linear ticket, Hermes event, commit hash를 삼각 연결합니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier-secondary">Important</span></td>
+              <td>1Password / Apple Passwords</td>
+              <td>API token과 secret의 보관 위치. Hermes는 값을 읽지 않고 참조명만 사용합니다.</td>
+              <td>Secret Reference, Vault Name, Rotation Date</td>
+              <td>Hermes가 raw secret을 저장하지 않도록 강제합니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier-secondary">Important</span></td>
+              <td>Sentry / Grafana / Datadog / PostHog</td>
+              <td>장애, 에러, 성능 문제, 사용자 행동 지표를 troubleshooting record에 연결</td>
+              <td>Error Event, Trace, Metric, Alert, Dashboard Link</td>
+              <td>운영 지표는 resume/career evidence로도 재사용됩니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier-optional">Optional</span></td>
+              <td>Slack / Discord / Telegram</td>
+              <td>중요 대화, 합의, 운영 논의, 분쟁 가능 thread의 선택 capture</td>
+              <td>Message, Thread, Channel, Attachment, Reaction</td>
+              <td>개인정보와 상대방 동의 이슈가 있으므로 수집 범위를 좁힙니다.</td>
+            </tr>
+            <tr>
+              <td><span class="tier-optional">Optional</span></td>
+              <td>Readwise Reader / Raindrop / Browser Bookmarks</td>
+              <td>읽은 문서, 하이라이트, 나중에 다시 볼 링크, 기술 조사 흔적 관리</td>
+              <td>Article, Highlight, Tag, URL, Read State</td>
+              <td>Research Librarian의 자료 입력원으로 사용합니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="architecture">
+        <h2>4. Infrastructure Architecture</h2>
+        <p>
+          Hermes의 인프라는 "agent가 똑똑하게 답변하는 구조"가 아니라 "과거 기록을 잃지 않고, 필요할 때 정확히 복원하는 구조"여야 합니다.
+          아래 구조에서 가장 중요한 컴포넌트는 Event Ledger, Raw Evidence Store, Entity Graph, Search Index입니다.
+        </p>
+
+        <div class="pipeline" aria-label="Hermes infrastructure flow diagram">
+          <svg viewBox="0 0 1100 640" role="img" aria-labelledby="pipeline-title pipeline-desc">
+            <title id="pipeline-title">Hermes Agent infrastructure flow</title>
+            <desc id="pipeline-desc">Input channels flow through ingestion, normalization, storage, recall, agents, approval, and SaaS sync adapters.</desc>
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z" fill="#5d6878"></path>
+              </marker>
+              <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#17202a" flood-opacity="0.10"></feDropShadow>
+              </filter>
+            </defs>
+
+            <rect x="20" y="24" width="170" height="92" rx="8" fill="#ffffff" stroke="#d8dee8" filter="url(#softShadow)"></rect>
+            <text x="38" y="54" class="box-title">Input Channels</text>
+            <text x="38" y="78" class="box-text">CLI / mobile shortcut</text>
+            <text x="38" y="96" class="box-text">Browser clipper / files</text>
+
+            <rect x="20" y="142" width="170" height="92" rx="8" fill="#ffffff" stroke="#d8dee8" filter="url(#softShadow)"></rect>
+            <text x="38" y="172" class="box-title">SaaS Events</text>
+            <text x="38" y="196" class="box-text">Linear / Notion</text>
+            <text x="38" y="214" class="box-text">Calendar / GitHub</text>
+
+            <rect x="20" y="260" width="170" height="92" rx="8" fill="#ffffff" stroke="#d8dee8" filter="url(#softShadow)"></rect>
+            <text x="38" y="290" class="box-title">Raw Sources</text>
+            <text x="38" y="314" class="box-text">PDF / email / screenshot</text>
+            <text x="38" y="332" class="box-text">contract / log export</text>
+
+            <rect x="250" y="104" width="180" height="134" rx="8" fill="#eef7f9" stroke="#9dbac4" filter="url(#softShadow)"></rect>
+            <text x="270" y="136" class="box-title">Ingestion Gateway</text>
+            <text x="270" y="162" class="box-text">webhooks</text>
+            <text x="270" y="180" class="box-text">scheduled sync</text>
+            <text x="270" y="198" class="box-text">manual capture</text>
+            <text x="270" y="216" class="box-text">file watcher</text>
+
+            <rect x="480" y="104" width="180" height="134" rx="8" fill="#eef7f9" stroke="#9dbac4" filter="url(#softShadow)"></rect>
+            <text x="500" y="136" class="box-title">Normalizer</text>
+            <text x="500" y="162" class="box-text">event schema</text>
+            <text x="500" y="180" class="box-text">dedupe</text>
+            <text x="500" y="198" class="box-text">entity extraction</text>
+            <text x="500" y="216" class="box-text">sensitivity label</text>
+
+            <rect x="720" y="24" width="170" height="92" rx="8" fill="#f4f8ef" stroke="#b8c8a4" filter="url(#softShadow)"></rect>
+            <text x="738" y="54" class="box-title">Event Ledger</text>
+            <text x="738" y="78" class="box-text">append-only events</text>
+            <text x="738" y="96" class="box-text">SQLite/Postgres</text>
+
+            <rect x="720" y="142" width="170" height="92" rx="8" fill="#f4f8ef" stroke="#b8c8a4" filter="url(#softShadow)"></rect>
+            <text x="738" y="172" class="box-title">Raw Evidence Store</text>
+            <text x="738" y="196" class="box-text">files + hashes</text>
+            <text x="738" y="214" class="box-text">encrypted backup</text>
+
+            <rect x="720" y="260" width="170" height="92" rx="8" fill="#f4f8ef" stroke="#b8c8a4" filter="url(#softShadow)"></rect>
+            <text x="738" y="290" class="box-title">Search Indexes</text>
+            <text x="738" y="314" class="box-text">FTS + embeddings</text>
+            <text x="738" y="332" class="box-text">entity graph</text>
+
+            <rect x="930" y="82" width="150" height="210" rx="8" fill="#ffffff" stroke="#d8dee8" filter="url(#softShadow)"></rect>
+            <text x="948" y="112" class="box-title">Recall API</text>
+            <text x="948" y="138" class="box-text">timeline query</text>
+            <text x="948" y="156" class="box-text">semantic search</text>
+            <text x="948" y="174" class="box-text">evidence packet</text>
+            <text x="948" y="192" class="box-text">status summary</text>
+            <text x="948" y="210" class="box-text">why/when/what</text>
+
+            <rect x="250" y="390" width="180" height="138" rx="8" fill="#fff7ef" stroke="#d6b6a0" filter="url(#softShadow)"></rect>
+            <text x="270" y="422" class="box-title">Policy Gate</text>
+            <text x="270" y="448" class="box-text">permission check</text>
+            <text x="270" y="466" class="box-text">approval workflow</text>
+            <text x="270" y="484" class="box-text">redaction</text>
+            <text x="270" y="502" class="box-text">audit log</text>
+
+            <rect x="480" y="390" width="180" height="138" rx="8" fill="#ffffff" stroke="#d8dee8" filter="url(#softShadow)"></rect>
+            <text x="500" y="422" class="box-title">Agent Profiles</text>
+            <text x="500" y="448" class="box-text">Chief of Staff</text>
+            <text x="500" y="466" class="box-text">PM / Archivist</text>
+            <text x="500" y="484" class="box-text">Historian / Evidence</text>
+            <text x="500" y="502" class="box-text">Career / Research</text>
+
+            <rect x="720" y="390" width="170" height="138" rx="8" fill="#ffffff" stroke="#d8dee8" filter="url(#softShadow)"></rect>
+            <text x="738" y="422" class="box-title">SaaS Adapters</text>
+            <text x="738" y="448" class="box-text">Linear GraphQL</text>
+            <text x="738" y="466" class="box-text">Notion REST</text>
+            <text x="738" y="484" class="box-text">Google APIs</text>
+            <text x="738" y="502" class="box-text">GitHub REST</text>
+
+            <rect x="930" y="390" width="150" height="138" rx="8" fill="#ffffff" stroke="#d8dee8" filter="url(#softShadow)"></rect>
+            <text x="948" y="422" class="box-title">External Views</text>
+            <text x="948" y="448" class="box-text">Linear workspace</text>
+            <text x="948" y="466" class="box-text">Notion wiki</text>
+            <text x="948" y="484" class="box-text">Calendar</text>
+            <text x="948" y="502" class="box-text">Drive / GitHub</text>
+
+            <line x1="190" y1="70" x2="250" y2="150" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="190" y1="188" x2="250" y2="174" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="190" y1="306" x2="250" y2="198" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="430" y1="171" x2="480" y2="171" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="660" y1="138" x2="720" y2="70" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="660" y1="171" x2="720" y2="188" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="660" y1="204" x2="720" y2="306" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="890" y1="70" x2="930" y2="142" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="890" y1="188" x2="930" y2="188" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="890" y1="306" x2="930" y2="234" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="1005" y1="292" x2="1005" y2="390" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="930" y1="458" x2="890" y2="458" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="720" y1="458" x2="660" y2="458" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <line x1="480" y1="458" x2="430" y2="458" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></line>
+            <path d="M340 390 C340 330, 570 318, 720 318" fill="none" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></path>
+            <path d="M570 390 C590 330, 710 292, 930 234" fill="none" stroke="#5d6878" stroke-width="2" marker-end="url(#arrow)"></path>
+          </svg>
+        </div>
+
+        <p class="flow-label">Layer Breakdown</p>
+        <div class="map">
+          <div class="architecture">
+            <div class="lane-title">Interface</div>
+            <div class="node"><strong>CLI</strong><span><code>hermes capture</code>, <code>hermes remember</code>, <code>hermes timeline</code>, <code>hermes status</code></span></div>
+            <div class="node"><strong>Local Dashboard</strong><span>오늘의 briefing, 프로젝트 상태, recall search, approval queue</span></div>
+            <div class="node"><strong>Mobile Shortcut</strong><span>음성 메모, 사진, 링크, 영수증, 대화 스크린샷을 즉시 capture</span></div>
+            <div class="node"><strong>Browser Clipper</strong><span>문서, 논문, issue, troubleshooting page를 원클릭 저장</span></div>
+
+            <div class="lane-title">Ingestion</div>
+            <div class="node critical"><strong>Webhook Receiver</strong><span>Linear, Notion, GitHub, Calendar 변경 event 수신</span></div>
+            <div class="node critical"><strong>Scheduled Sync</strong><span>누락 보정용 주기적 pull, pagination, rate limit 처리</span></div>
+            <div class="node critical"><strong>File Watcher</strong><span>drop folder에 들어온 PDF, 이미지, export 파일 ingest</span></div>
+            <div class="node critical"><strong>Email Label Watcher</strong><span>특정 라벨이 붙은 메일 thread와 attachment만 선택 수집</span></div>
+
+            <div class="lane-title">Core Memory</div>
+            <div class="node storage"><strong>Event Ledger</strong><span>모든 사건의 append-only 원장. SQLite로 시작하고 필요하면 Postgres로 이동</span></div>
+            <div class="node storage"><strong>Raw Evidence Store</strong><span>원본 파일, hash, source URL, revision, export bundle 보존</span></div>
+            <div class="node storage"><strong>Entity Graph</strong><span>사람, 조직, 프로젝트, 문서, 티켓, 결정, 사건 관계 그래프</span></div>
+            <div class="node storage"><strong>Search Index</strong><span>SQLite FTS / Meilisearch + pgvector / Qdrant 의미 검색</span></div>
+
+            <div class="lane-title">Reasoning</div>
+            <div class="node"><strong>Recall Engine</strong><span>키워드, 기간, 사람, 프로젝트, 의미 검색을 결합해 context pack 생성</span></div>
+            <div class="node"><strong>Timeline Builder</strong><span>선택된 사건과 증거를 시간순으로 정렬하고 gap을 표시</span></div>
+            <div class="node"><strong>Agent Orchestrator</strong><span>프로필별 작업 큐, 도구 권한, 재시도, 실행 로그 관리</span></div>
+            <div class="node"><strong>Summary Generator</strong><span>daily/weekly/monthly review, decision brief, evidence packet 생성</span></div>
+
+            <div class="lane-title">Safety</div>
+            <div class="node guard"><strong>Policy Gate</strong><span>read/write/export/delete 권한 분리, 민감도별 승인 요구</span></div>
+            <div class="node guard"><strong>Secrets Boundary</strong><span>토큰은 password manager나 OS keychain에 보관, ledger에는 참조만 저장</span></div>
+            <div class="node guard"><strong>Audit Log</strong><span>누가 어떤 프로필로 무엇을 읽고 썼는지 변경 불가능하게 기록</span></div>
+            <div class="node guard"><strong>Backup & Export</strong><span>암호화 backup, 정기 export, SaaS lock-in 방지</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="data-model">
+        <h2>5. Core Data Model</h2>
+        <p>
+          Hermes의 최소 원자 단위는 ticket이 아니라 <code>Event</code>입니다. 프로젝트 티켓, 문서, 결정, 법적 이슈, 장애, 구매 결정, 커리어 고민은 모두 event로 기록하고, 필요할 때 특화 record를 붙입니다.
+        </p>
+        <pre><code>Event
+  id: HME-2026-000001
+  timestamp: 2026-07-06T10:30:00+09:00
+  type: project | document | decision | incident | legal | career | purchase | research
+  sensitivity: public | personal | confidential | legal_sensitive
+  title:
+  summary:
+  raw_sources:
+    - kind: file | url | email | ticket | commit | calendar_event
+      source_id:
+      immutable_ref:
+      sha256:
+  actors:
+    people: []
+    organizations: []
+  relations:
+    projects: []
+    tickets: []
+    documents: []
+    decisions: []
+  next_actions: []
+  confidence: human_confirmed | agent_inferred | imported
+  created_by_profile:
+  external_refs:
+    linear:
+    notion:
+    github:
+    calendar:</code></pre>
+
+        <div class="decision-grid">
+          <div class="decision">
+            <h3>Project Record</h3>
+            <p>Linear와 연결되는 실행 단위입니다. 목표, 범위, milestone, ticket set, status, deadline, stakeholder, 성공 기준, 완료 증거를 보관합니다.</p>
+          </div>
+          <div class="decision">
+            <h3>Document Record</h3>
+            <p>Notion과 연결되는 지식 단위입니다. 원본 파일 위치, 요약, 태그, 관련 decision, 관련 프로젝트, 재방문 이유, 인용 가능성을 보관합니다.</p>
+          </div>
+          <div class="decision">
+            <h3>Decision Record</h3>
+            <p>선택지, 판단 기준, 결정 근거, 리스크, 반대 의견, 재검토 조건, 실제 결과를 분리해서 저장합니다.</p>
+          </div>
+          <div class="decision">
+            <h3>Evidence Record</h3>
+            <p>법적/계약/분쟁 가능성이 있는 자료를 원본 중심으로 저장합니다. 요약보다 hash, timestamp, source, chain of custody가 중요합니다.</p>
+          </div>
+        </div>
+
+        <div class="danger callout">
+          <strong>법적 이슈 주의:</strong>
+          Hermes는 법률 조언자가 아니라 기록 정리자여야 합니다. 사실 타임라인, 원본 증거, 관련자, 금액, 날짜, 커뮤니케이션 기록을 정리하되 법적 판단은 변호사 검토 대상으로 분리합니다.
+        </div>
+      </section>
+
+      <section id="commands">
+        <h2>6. 예상 명령 인터페이스</h2>
+        <p>
+          Hermes는 복잡한 UI보다 빠른 capture와 recall 명령이 먼저 필요합니다. 아래 명령들이 가능해지면 daily life 관리 비서로서 실제 효용이 생깁니다.
+        </p>
+        <pre><code>hermes capture "오늘 A사 대표와 정산 이슈를 30분 통화함. 다음 주 월요일까지 자료 보내기로 함."
+hermes doc add ./contract.pdf --type contract --sensitivity legal_sensitive
+hermes ticket create --project "Ultimate Hermes" --title "Linear sync adapter 구현"
+hermes incident "prod API timeout" --project "my-service"
+hermes decision "Notion을 문서 inventory로 쓰고 Hermes ledger를 원장으로 둔다"
+hermes remember "작년에 Vercel 배포 에러 해결했던 기록 찾아줘"
+hermes timeline "A사 정산 관련 이슈"
+hermes evidence "법적 분쟁 가능성이 있는 A사 관련 자료 패킷 생성"
+hermes status --all-projects
+hermes review weekly</code></pre>
+      </section>
+
+      <section id="roadmap">
+        <h2>7. MVP 구축 순서</h2>
+        <ol>
+          <li><strong>Local Hermes Ledger</strong>: SQLite 또는 Postgres로 Event, Entity, Source, ExternalRef 테이블을 먼저 만듭니다.</li>
+          <li><strong>Capture CLI</strong>: 텍스트, URL, 파일, 스크린샷을 빠르게 넣는 명령부터 만듭니다.</li>
+          <li><strong>Notion Inventory</strong>: Documents, Decisions, Incidents, Evidence, People/Orgs database를 생성하고 Hermes ID를 relation key로 둡니다.</li>
+          <li><strong>Linear Sync</strong>: 프로젝트와 티켓을 동기화하고, Linear webhook을 Hermes event로 저장합니다.</li>
+          <li><strong>Search Layer</strong>: SQLite FTS로 시작하고, 문서가 많아지면 embedding index를 붙입니다.</li>
+          <li><strong>Daily Briefing</strong>: Chief of Staff가 Calendar, Linear, Notion, Hermes Ledger를 읽어 매일 아침 요약을 만듭니다.</li>
+          <li><strong>Evidence Mode</strong>: legal_sensitive 자료는 hash, 원본 경로, 타임라인, export bundle을 별도 흐름으로 처리합니다.</li>
+        </ol>
+
+        <div class="callout warning">
+          <strong>초기 범위 제한:</strong>
+          처음부터 모든 SaaS를 붙이면 실패 확률이 높습니다. 1차는 <code>Hermes Ledger + Capture CLI + Notion Documents + Linear Projects</code>만 구현하고, Calendar와 GitHub를 2차로 붙이는 편이 좋습니다.
+        </div>
+      </section>
+
+      <section id="sources">
+        <h2>8. 공식 문서 참고</h2>
+        <p class="compact">
+          아래 문서는 통합 가능성을 확인하기 위해 참고한 공식 문서입니다. 구현 시에는 각 서비스의 OAuth scope, rate limit, webhook 검증, 데이터 보존 정책을 별도로 점검해야 합니다.
+        </p>
+        <ul class="source-list">
+          <li><a href="https://linear.app/developers/graphql">Linear GraphQL API</a>: issues, teams, workflow states, mutations, webhooks, OAuth/API key.</li>
+          <li><a href="https://developers.notion.com/guides/get-started/overview">Notion API Overview</a>: pages, databases, comments, file uploads, search, webhooks, connection permissions.</li>
+          <li><a href="https://developers.google.com/workspace/calendar/api/guides/overview">Google Calendar API</a>: calendars, events, recurring events, reminders, synchronization, push notifications.</li>
+          <li><a href="https://developers.google.com/workspace/gmail/api/guides">Gmail API</a>: messages, threads, labels, search/filter, synchronization, push notifications.</li>
+          <li><a href="https://developers.google.com/workspace/drive/api/guides/about-sdk">Google Drive API</a>: file upload/download, search, sharing, app-specific storage, file activity.</li>
+          <li><a href="https://docs.github.com/en/rest">GitHub REST API</a>: repositories, issues, pull requests, commits, releases, webhooks, automation.</li>
+        </ul>
+      </section>
+    </main>
+  </article>
+</body>
+</html>
