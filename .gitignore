@@ -6,3 +6,4 @@ coverage/
 .hermes/
 *.log
 .DS_Store
+configs/
