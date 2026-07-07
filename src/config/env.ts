@@ -1,4 +1,11 @@
-import "dotenv/config";
+import os from "node:os";
+import path from "node:path";
+import dotenv from "dotenv";
+
+dotenv.config();
+dotenv.config({
+  path: path.join(process.env.HERMES_HOME ?? path.join(os.homedir(), ".hermes"), ".env")
+});
 
 export type AppConfig = {
   databaseUrl: string;

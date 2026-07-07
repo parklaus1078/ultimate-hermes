@@ -15,6 +15,7 @@
     "dev": "tsx watch src/server/index.ts",
     "start": "node dist/src/server/index.js",
     "test": "vitest run",
+    "test:life-archive": "python3 -m unittest discover -s tests/life_archive",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:migrate": "npm run build && node dist/src/cli/index.js migrate",

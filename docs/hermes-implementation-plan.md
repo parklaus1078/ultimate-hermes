@@ -1,11 +1,18 @@
 # Hermes Agent Implementation Plan
 
-Status: draft
+Status: superseded by `docs/hermes-native-pivot-plan.md`
 Last updated: 2026-07-06
 Primary audience: AI coding agents and human maintainers
 Related docs:
 - `docs/hermes-agent-report.html`
 - `docs/hermes-agent-architecture.html`
+- `docs/hermes-native-pivot-plan.md`
+
+> Pivot note: this document describes the earlier standalone-app direction.
+> The implementation target has changed to extending the existing Nous
+> Research Hermes Agent installation via a native memory provider, native MCP,
+> gateway, kanban, and skills. Use `docs/hermes-native-pivot-plan.md` as the
+> source of truth for future implementation.
 
 ## 0. Objective
 
