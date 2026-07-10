@@ -1,0 +1,8 @@
+name: life_archive
+version: 0.1.0
+description: "Postgres + pgvector long-term life archive for Hermes Agent."
+pip_dependencies:
+  - "psycopg[binary]>=3.1"
+hooks:
+  - on_session_end
+

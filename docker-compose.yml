@@ -5,10 +5,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: hermes
-      POSTGRES_PASSWORD: hermes
+      POSTGRES_PASSWORD: ${HERMES_POSTGRES_PASSWORD:-hermes}
       POSTGRES_DB: hermes
     ports:
-      - "55432:5432"
+      - "127.0.0.1:55432:5432"
     volumes:
       - hermes-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -27,14 +27,14 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      HERMES_DATABASE_URL: postgres://hermes:hermes@postgres:5432/hermes
+      HERMES_DATABASE_URL: postgres://hermes:${HERMES_POSTGRES_PASSWORD:-hermes}@postgres:5432/hermes
       HERMES_PORT: 8787
       HERMES_HOST: 0.0.0.0
       HERMES_DATA_DIR: /app/.hermes
       HERMES_EMBEDDING_PROVIDER: local
       HERMES_EMBEDDING_DIMENSIONS: 1536
     ports:
-      - "8787:8787"
+      - "127.0.0.1:8787:8787"
     volumes:
       - hermes-app-data:/app/.hermes
     command: ["sh", "-lc", "node dist/src/cli/index.js migrate && node dist/src/server/index.js"]

@@ -1,8 +1,27 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import type { SecretStore } from "./secret-store.js";
 
 const execFileAsync = promisify(execFile);
+
+function runSecurityWithInput(args: string[], input: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("security", args, { stdio: ["pipe", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`security ${args[0]} failed with code ${code}: ${stderr.trim()}`));
+    });
+    child.stdin.end(input);
+  });
+}
 
 export class MacOSKeychainSecretStore implements SecretStore {
   describe(): string {
@@ -21,7 +40,10 @@ export class MacOSKeychainSecretStore implements SecretStore {
   }
 
   async set(service: string, account: string, value: string): Promise<void> {
-    await execFileAsync("security", ["add-generic-password", "-U", "-s", service, "-a", account, "-w", value]);
+    await runSecurityWithInput(
+      ["add-generic-password", "-U", "-s", service, "-a", account, "-w"],
+      `${value}\n${value}\n`
+    );
   }
 
   async delete(service: string, account: string): Promise<void> {

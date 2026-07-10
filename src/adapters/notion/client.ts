@@ -10,10 +10,14 @@ export class NotionClient {
   private async token(): Promise<string> {
     const config = loadConfig();
     const token = await this.secretStore.get(config.keychain.notion.service, config.keychain.notion.account);
-    if (!token) {
-      throw new Error(`Missing Notion API key in ${this.secretStore.describe()} service=${config.keychain.notion.service} account=${config.keychain.notion.account}`);
-    }
-    return token;
+    if (token) return token;
+
+    const envToken = process.env.NOTION_API_KEY ?? process.env.NOTION_API_TOKEN;
+    if (envToken) return envToken;
+
+    throw new Error(
+      `Missing Notion API key in ${this.secretStore.describe()} service=${config.keychain.notion.service} account=${config.keychain.notion.account}, or NOTION_API_KEY/NOTION_API_TOKEN`
+    );
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
