@@ -371,6 +371,97 @@ scopes, including Gmail send/modify, Calendar, Drive, Docs, Sheets, and
 Contacts read. For a strict read/import-only setup, do not approve the OAuth
 screen until the scopes are narrowed or you use a dedicated Google account.
 
+## Remote MCP/API Access Over Tailscale
+
+Goal: PC agents such as Claude Code, Codex, or PC Hermes should treat AI as a
+runtime and retrieve shared context from the same Ultimate Hermes data layer.
+Do **not** expose Postgres directly to agents. Expose only the authenticated API
+or MCP interface and keep Postgres bound to localhost/private Docker networking.
+
+### MacBook server environment
+
+Bind the server to the MacBook's Tailscale IP, not `0.0.0.0`:
+
+```bash
+cd /Users/kay/Desktop/dev/projects/ultimate-hermes
+TAILSCALE_IP="$(tailscale ip -4 | head -n 1)"
+export HERMES_HOST="$TAILSCALE_IP"
+export HERMES_PORT=8787
+export HERMES_PUBLIC_BASE_URL="http://${TAILSCALE_IP}:8787"
+export HERMES_API_TOKEN="$(openssl rand -hex 32)"
+npm run build
+npm start
+```
+
+Persist `HERMES_API_TOKEN` in a local secret store or `.env` file that is not
+committed. Do not paste it into chat, git, Linear, Notion, or logs.
+
+### API examples
+
+```bash
+AUTH_HEADER="Authorization: Bearer ${HERMES_API_TOKEN}"
+
+curl -H "$AUTH_HEADER" \
+  "http://${TAILSCALE_IP}:8787/api/v1/events/recent?limit=5"
+
+curl -H "$AUTH_HEADER" \
+  -H "content-type: application/json" \
+  -d '{"query":"Personal Operating System: Notion + Linear Tracking","limit":5}' \
+  "http://${TAILSCALE_IP}:8787/api/v1/recall"
+
+curl -H "$AUTH_HEADER" \
+  -H "content-type: application/json" \
+  -d '{"query":"Nimble KAY-68","limit":8}' \
+  "http://${TAILSCALE_IP}:8787/api/v1/context-pack"
+```
+
+Available API routes:
+
+- `GET /api/v1/health` — unauthenticated health check
+- `GET /api/v1/events/recent?limit=25` — recent Life Archive records
+- `POST /api/v1/recall` — `{ "query": string, "limit"?: number }`
+- `GET /api/v1/timeline?topic=...&limit=100`
+- `POST /api/v1/context-pack` — Markdown context pack for agents
+- `POST /api/v1/events` — durable write; use only with explicit approval/policy
+
+### MCP examples
+
+For MCP-over-HTTP clients, point them at:
+
+```text
+http://<macbook-tailscale-ip>:8787/mcp
+```
+
+with an HTTP `Authorization` header if the client supports custom headers.
+The endpoint implements MCP JSON-RPC methods `initialize`, `tools/list`, and
+`tools/call` for:
+
+- `recent_events`
+- `recall_events`
+- `timeline`
+- `context_pack`
+- `capture_event`
+
+For clients that support only stdio MCP, use Tailscale SSH to run the server on
+the MacBook while keeping DB access local to the MacBook:
+
+```json
+{
+  "mcpServers": {
+    "ultimate-hermes": {
+      "command": "ssh",
+      "args": [
+        "kay@<macbook-tailnet-name-or-ip>",
+        "cd /Users/kay/Desktop/dev/projects/ultimate-hermes && node dist/src/mcp/server.js"
+      ]
+    }
+  }
+}
+```
+
+This keeps Claude Code/Codex on the PC as interchangeable runtimes while the
+shared data remains in Postgres/Life Archive.
+
 ## Provider Tools
 
 `life_archive` exposes these Hermes tools:
@@ -480,8 +571,9 @@ npm run cli -- remember "test memory"
 - Postgres is the durable source of truth.
 - Linear is for selected active tickets only.
 - Legal-sensitive records are evidence timelines, not legal advice.
-- Docker ports are bound to `127.0.0.1`; do not expose Postgres or the legacy
-  Node server on `0.0.0.0`.
+- Docker Postgres stays bound to `127.0.0.1`. For remote agent access, bind the
+  Node API to the MacBook's Tailscale IP plus `HERMES_API_TOKEN`; do not expose
+  Postgres or the Node server on public `0.0.0.0`.
 - Run `scripts/harden_hermes_permissions.sh` after credential setup or profile
   regeneration to keep tokens, Google OAuth files, state DBs, and profile
   configs at `600`/`700`.
