@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Hermes Agent local daily-life memory system",
   "bin": {
-    "hermes": "./dist/src/cli/index.js"
+    "hermes": "./dist/src/cli/index.js",
+    "ultimate-hermes-mcp": "./dist/src/mcp/server.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

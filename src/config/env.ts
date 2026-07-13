@@ -11,6 +11,8 @@ export type AppConfig = {
   databaseUrl: string;
   port: number;
   host: string;
+  publicBaseUrl: string;
+  apiToken: string | null;
   dataDir: string;
   embeddingProvider: "local" | "http";
   embeddingDimensions: number;
@@ -49,6 +51,8 @@ export function loadConfig(): AppConfig {
     databaseUrl: strEnv("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:55432/hermes"),
     port: intEnv("HERMES_PORT", 8787),
     host: strEnv("HERMES_HOST", "127.0.0.1"),
+    publicBaseUrl: strEnv("HERMES_PUBLIC_BASE_URL", `http://${strEnv("HERMES_HOST", "127.0.0.1")}:${intEnv("HERMES_PORT", 8787)}`),
+    apiToken: process.env.HERMES_API_TOKEN?.trim() || null,
     dataDir: strEnv("HERMES_DATA_DIR", ".hermes"),
     embeddingProvider,
     embeddingDimensions: intEnv("HERMES_EMBEDDING_DIMENSIONS", 1536),

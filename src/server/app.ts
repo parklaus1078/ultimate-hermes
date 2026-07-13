@@ -8,10 +8,75 @@ import { GoogleOAuthClient } from "../adapters/google/oauth.js";
 import { createSecretStore } from "../secrets/index.js";
 import { RecallService } from "../search/recall.js";
 import { LocalDeterministicEmbeddingProvider } from "../search/embedding-provider.js";
+import { requireRemoteAuth } from "../remote/auth.js";
+import { captureEvent, contextPack, recallEvents, recentEvents, timeline } from "../remote/tools.js";
+import { handleMcpRequest } from "../mcp/server.js";
 
 export function createApp() {
   const app = express();
   app.use(express.json({ limit: "2mb" }));
+
+  app.post("/mcp", requireRemoteAuth, async (req, res, next) => {
+    try {
+      const response = await handleMcpRequest(req.body);
+      if (!response) {
+        res.status(202).json({ ok: true });
+        return;
+      }
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/v1/health", async (_req, res, next) => {
+    try {
+      await migrate();
+      res.json({ ok: true, service: "ultimate-hermes", interfaces: ["api", "mcp"] });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/v1/events/recent", requireRemoteAuth, async (req, res, next) => {
+    try {
+      res.json(await recentEvents(req.query));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/recall", requireRemoteAuth, async (req, res, next) => {
+    try {
+      res.json(await recallEvents(req.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/v1/timeline", requireRemoteAuth, async (req, res, next) => {
+    try {
+      res.json(await timeline(req.query));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/events", requireRemoteAuth, async (req, res, next) => {
+    try {
+      res.json(await captureEvent(req.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/context-pack", requireRemoteAuth, async (req, res, next) => {
+    try {
+      res.type("text/markdown").send(await contextPack(req.body));
+    } catch (error) {
+      next(error);
+    }
+  });
 
   app.get("/health", async (_req, res, next) => {
     try {
@@ -62,7 +127,8 @@ export function createApp() {
   app.get("/oauth/google/start", async (_req, res, next) => {
     try {
       const config = loadConfig();
-      const url = await new GoogleOAuthClient(createSecretStore()).authUrl(`http://${config.host}:${config.port}/oauth/google/callback`);
+      const redirectUri = `${config.publicBaseUrl}/oauth/google/callback`;
+      const url = await new GoogleOAuthClient(createSecretStore()).authUrl(redirectUri);
       res.redirect(url);
     } catch (error) {
       next(error);
@@ -74,7 +140,8 @@ export function createApp() {
       const code = String(req.query.code ?? "");
       if (!code) throw new Error("Missing Google OAuth code");
       const config = loadConfig();
-      await new GoogleOAuthClient(createSecretStore()).exchangeCode(code, `http://${config.host}:${config.port}/oauth/google/callback`);
+      const redirectUri = `${config.publicBaseUrl}/oauth/google/callback`;
+      await new GoogleOAuthClient(createSecretStore()).exchangeCode(code, redirectUri);
       res.type("text/plain").send("Google OAuth connected. You can close this tab.");
     } catch (error) {
       next(error);
