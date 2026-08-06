@@ -13,8 +13,13 @@ let pool: pg.Pool | undefined;
 
 export function getDb(): Db {
   if (!pool) {
+    const config = loadConfig();
     pool = new Pool({
-      connectionString: loadConfig().databaseUrl
+      connectionString: config.databaseUrl,
+      max: config.databaseMaxConnections,
+      connectionTimeoutMillis: config.databaseConnectionTimeoutMs,
+      idleTimeoutMillis: config.databaseIdleTimeoutMs,
+      application_name: "ultimate-hermes"
     });
   }
   return pool;
@@ -57,21 +62,45 @@ function migrationsDir(): string {
 }
 
 export async function migrate(): Promise<string[]> {
+  const config = loadConfig();
+  const migrationPool = new Pool({
+    connectionString: config.migrationDatabaseUrl,
+    max: 1,
+    connectionTimeoutMillis: config.databaseConnectionTimeoutMs,
+    idleTimeoutMillis: config.databaseIdleTimeoutMs,
+    application_name: "ultimate-hermes-migrations"
+  });
+  const client = await migrationPool.connect();
   const dir = migrationsDir();
   const files = (await readdir(dir)).filter((file) => file.endsWith(".sql")).sort();
   const applied: string[] = [];
 
-  await query("create table if not exists schema_migrations (id text primary key, applied_at timestamptz not null default now())");
+  try {
+    await client.query("select pg_advisory_lock(hashtext('ultimate-hermes:migrations'))");
+    await client.query("create table if not exists schema_migrations (id text primary key, applied_at timestamptz not null default now())");
 
-  for (const file of files) {
-    const already = await query("select id from schema_migrations where id = $1", [file]);
-    if (already.rowCount) continue;
-    const sql = await readFile(path.join(dir, file), "utf8");
-    await withTransaction(async (client) => {
-      await client.query(sql);
-      await client.query("insert into schema_migrations (id) values ($1)", [file]);
-    });
-    applied.push(file);
+    for (const file of files) {
+      const already = await client.query("select id from schema_migrations where id = $1", [file]);
+      if (already.rowCount) continue;
+      const sql = await readFile(path.join(dir, file), "utf8");
+      await client.query("begin");
+      try {
+        await client.query(sql);
+        await client.query("insert into schema_migrations (id) values ($1)", [file]);
+        await client.query("commit");
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      }
+      applied.push(file);
+    }
+  } finally {
+    try {
+      await client.query("select pg_advisory_unlock(hashtext('ultimate-hermes:migrations'))");
+    } finally {
+      client.release();
+      await migrationPool.end();
+    }
   }
 
   return applied;

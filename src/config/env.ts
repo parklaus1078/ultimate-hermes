@@ -8,16 +8,26 @@ dotenv.config({
 });
 
 export type AppConfig = {
+  nodeEnv: string;
   databaseUrl: string;
+  migrationDatabaseUrl: string;
+  databaseMaxConnections: number;
+  databaseConnectionTimeoutMs: number;
+  databaseIdleTimeoutMs: number;
   port: number;
   host: string;
   publicBaseUrl: string;
   apiToken: string | null;
+  allowedHosts: string[];
+  allowedOrigins: string[];
+  allowRemoteWrites: boolean;
+  enableLegacyRoutes: boolean;
   dataDir: string;
-  embeddingProvider: "local" | "http";
+  embeddingProvider: "disabled" | "local" | "http";
   embeddingDimensions: number;
   embeddingUrl: string;
   embeddingModel: string;
+  embedLegalSensitive: boolean;
   keychain: {
     linear: { service: string; account: string };
     notion: { service: string; account: string };
@@ -41,23 +51,78 @@ function strEnv(name: string, fallback?: string): string {
   return raw;
 }
 
+function boolEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  if (["1", "true", "yes", "on"].includes(raw.trim().toLowerCase())) return true;
+  if (["0", "false", "no", "off"].includes(raw.trim().toLowerCase())) return false;
+  throw new Error(`Invalid boolean env var ${name}: ${raw}`);
+}
+
+function csvEnv(name: string): string[] {
+  return (process.env[name] ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function publicBaseUrl(host: string, port: number): string {
+  const configured = process.env.HERMES_PUBLIC_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  const renderHostname = process.env.RENDER_EXTERNAL_HOSTNAME?.trim();
+  if (renderHostname) return `https://${renderHostname}`;
+  return `http://${host}:${port}`;
+}
+
+function defaultAllowedHosts(baseUrl: string, host: string): string[] {
+  const defaults = new Set(["127.0.0.1", "localhost", "::1"]);
+  if (host !== "0.0.0.0" && host !== "::") defaults.add(host);
+  try {
+    defaults.add(new URL(baseUrl).hostname);
+  } catch {
+    // loadConfig will still surface malformed URLs where they are used.
+  }
+  for (const value of csvEnv("HERMES_ALLOWED_HOSTS")) defaults.add(value);
+  return [...defaults];
+}
+
 export function loadConfig(): AppConfig {
-  const embeddingProvider = (process.env.HERMES_EMBEDDING_PROVIDER ?? "local") as AppConfig["embeddingProvider"];
-  if (!["local", "http"].includes(embeddingProvider)) {
+  const nodeEnv = process.env.NODE_ENV?.trim() || "development";
+  const port = intEnv("HERMES_PORT", intEnv("PORT", 8787));
+  const host = strEnv("HERMES_HOST", nodeEnv === "production" ? "0.0.0.0" : "127.0.0.1");
+  const baseUrl = publicBaseUrl(host, port);
+  const databaseUrl = strEnv("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:55432/hermes");
+  const hasEmbeddingKey = Boolean(
+    process.env.HERMES_EMBEDDING_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      process.env.HERMES_SECRET_HERMES_EMBEDDING_DEFAULT
+  );
+  const embeddingProvider = (process.env.HERMES_EMBEDDING_PROVIDER ?? (hasEmbeddingKey ? "http" : "disabled")) as AppConfig["embeddingProvider"];
+  if (!["disabled", "local", "http"].includes(embeddingProvider)) {
     throw new Error(`Unsupported HERMES_EMBEDDING_PROVIDER=${embeddingProvider}`);
   }
 
   return {
-    databaseUrl: strEnv("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:55432/hermes"),
-    port: intEnv("HERMES_PORT", 8787),
-    host: strEnv("HERMES_HOST", "127.0.0.1"),
-    publicBaseUrl: strEnv("HERMES_PUBLIC_BASE_URL", `http://${strEnv("HERMES_HOST", "127.0.0.1")}:${intEnv("HERMES_PORT", 8787)}`),
+    nodeEnv,
+    databaseUrl,
+    migrationDatabaseUrl: strEnv("HERMES_MIGRATION_DATABASE_URL", databaseUrl),
+    databaseMaxConnections: intEnv("HERMES_DATABASE_MAX_CONNECTIONS", 5),
+    databaseConnectionTimeoutMs: intEnv("HERMES_DATABASE_CONNECTION_TIMEOUT_MS", 10_000),
+    databaseIdleTimeoutMs: intEnv("HERMES_DATABASE_IDLE_TIMEOUT_MS", 30_000),
+    port,
+    host,
+    publicBaseUrl: baseUrl,
     apiToken: process.env.HERMES_API_TOKEN?.trim() || null,
+    allowedHosts: defaultAllowedHosts(baseUrl, host),
+    allowedOrigins: csvEnv("HERMES_ALLOWED_ORIGINS"),
+    allowRemoteWrites: boolEnv("HERMES_ALLOW_REMOTE_WRITES", false),
+    enableLegacyRoutes: boolEnv("HERMES_ENABLE_LEGACY_ROUTES", false),
     dataDir: strEnv("HERMES_DATA_DIR", ".hermes"),
     embeddingProvider,
     embeddingDimensions: intEnv("HERMES_EMBEDDING_DIMENSIONS", 1536),
     embeddingUrl: strEnv("HERMES_EMBEDDING_URL", "https://api.openai.com/v1/embeddings"),
     embeddingModel: strEnv("HERMES_EMBEDDING_MODEL", "text-embedding-3-small"),
+    embedLegalSensitive: boolEnv("HERMES_EMBED_LEGAL_SENSITIVE", false),
     keychain: {
       linear: {
         service: strEnv("HERMES_LINEAR_KEYCHAIN_SERVICE", "hermes-linear"),

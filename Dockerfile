@@ -11,11 +11,16 @@ RUN npm run build
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json package-lock.json* ./
+ENV NODE_ENV=production \
+    HERMES_HOST=0.0.0.0 \
+    PORT=8787
+COPY --chown=node:node --from=deps /app/node_modules ./node_modules
+COPY --chown=node:node package.json package-lock.json* ./
 RUN npm prune --omit=dev
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/src/db/migrations ./src/db/migrations
+COPY --chown=node:node --from=build /app/dist ./dist
+COPY --chown=node:node --from=build /app/src/db/migrations ./src/db/migrations
+USER node
 EXPOSE 8787
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/src/server/index.js"]

@@ -1,9 +1,9 @@
 {
   "name": "ultimate-hermes",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Hermes Agent local daily-life memory system",
+  "description": "Shared Supabase memory and remote MCP service for Hermes, Codex, and Claude",
   "bin": {
     "hermes": "./dist/src/cli/index.js",
     "ultimate-hermes-mcp": "./dist/src/mcp/server.js"
@@ -19,19 +19,22 @@
     "test:life-archive": "python3 -m unittest discover -s tests/life_archive",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "npm run typecheck && npm test && npm run test:life-archive && npm run build",
     "db:migrate": "npm run build && node dist/src/cli/index.js migrate",
+    "db:migrate:supabase": "scripts/migrate_local_db_to_supabase.sh",
     "setup:check": "npm run build && node dist/src/cli/index.js setup check",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f hermes"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
     "pg": "^8.13.1",
-    "zod": "^3.24.1"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
@@ -39,7 +42,7 @@
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22"

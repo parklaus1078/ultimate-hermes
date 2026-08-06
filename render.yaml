@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: ultimate-hermes-mcp
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/v1/ready
+    autoDeployTrigger: commit
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HERMES_HOST
+        value: 0.0.0.0
+      - key: HERMES_DATABASE_URL
+        sync: false
+      - key: HERMES_API_TOKEN
+        sync: false
+      - key: HERMES_SECRET_STORE
+        value: env
+      - key: HERMES_ALLOW_REMOTE_WRITES
+        value: "true"
+      - key: HERMES_ENABLE_LEGACY_ROUTES
+        value: "false"
+      - key: HERMES_DATABASE_MAX_CONNECTIONS
+        value: "5"
+      - key: HERMES_DATABASE_CONNECTION_TIMEOUT_MS
+        value: "10000"
+      - key: HERMES_DATABASE_IDLE_TIMEOUT_MS
+        value: "30000"
+      - key: HERMES_EMBEDDING_PROVIDER
+        value: disabled

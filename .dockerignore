@@ -1,8 +1,13 @@
 node_modules
 dist
 coverage
+.git
+.omx
 .env
 .env.local
 .hermes
+migration-reports
+__pycache__
+*.pyc
 .DS_Store
 *.log

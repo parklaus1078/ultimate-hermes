@@ -1,0 +1,5 @@
+[mcp_servers.ultimate-hermes]
+url = "https://YOUR-ULTIMATE-HERMES-HOST/mcp"
+bearer_token_env_var = "ULTIMATE_HERMES_API_TOKEN"
+startup_timeout_sec = 30
+tool_timeout_sec = 120

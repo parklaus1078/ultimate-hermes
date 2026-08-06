@@ -7,3 +7,6 @@ coverage/
 *.log
 .DS_Store
 configs/
+migration-reports/
+__pycache__/
+*.py[cod]

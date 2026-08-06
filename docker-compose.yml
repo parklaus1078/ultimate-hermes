@@ -28,16 +28,20 @@ services:
         condition: service_healthy
     environment:
       HERMES_DATABASE_URL: postgres://hermes:${HERMES_POSTGRES_PASSWORD:-hermes}@postgres:5432/hermes
+      HERMES_API_TOKEN: ${HERMES_API_TOKEN:-local-development-token}
       HERMES_PORT: 8787
       HERMES_HOST: 0.0.0.0
+      HERMES_PUBLIC_BASE_URL: http://127.0.0.1:8787
+      HERMES_SECRET_STORE: env
+      HERMES_ALLOW_REMOTE_WRITES: "true"
+      HERMES_ENABLE_LEGACY_ROUTES: "false"
       HERMES_DATA_DIR: /app/.hermes
-      HERMES_EMBEDDING_PROVIDER: local
+      HERMES_EMBEDDING_PROVIDER: disabled
       HERMES_EMBEDDING_DIMENSIONS: 1536
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
       - hermes-app-data:/app/.hermes
-    command: ["sh", "-lc", "node dist/src/cli/index.js migrate && node dist/src/server/index.js"]
 
 volumes:
   hermes-postgres-data:

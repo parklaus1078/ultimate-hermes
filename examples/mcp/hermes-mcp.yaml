@@ -1,0 +1,8 @@
+mcp_servers:
+  ultimate-hermes:
+    url: ${ULTIMATE_HERMES_MCP_URL}
+    headers:
+      Authorization: Bearer ${MCP_ULTIMATE_HERMES_API_KEY}
+    timeout: 180
+    connect_timeout: 60
+    enabled: true
