@@ -21,6 +21,7 @@ Optional environment:
 
 Options:
   --dry-run         Check connectivity and print source counts/checksums only.
+  --verify-only     Compare the current target data with the source without restoring.
   --allow-nonempty  Attempt restore even when target application tables contain rows.
   --keep-dump       Keep the temporary custom-format dump and print its path.
   -h, --help        Show this help.
@@ -28,11 +29,13 @@ EOF
 }
 
 dry_run=false
+verify_only=false
 allow_nonempty=false
 keep_dump=false
 while (($#)); do
   case "$1" in
     --dry-run) dry_run=true ;;
+    --verify-only) verify_only=true ;;
     --allow-nonempty) allow_nonempty=true ;;
     --keep-dump) keep_dump=true ;;
     -h|--help) usage; exit 0 ;;
@@ -95,6 +98,7 @@ create temporary table ultimate_hermes_migration_manifest (
 do $manifest$
 declare
   table_name text;
+  canonical_row_expression text;
   application_tables constant text[] := array[
     'agent_runs',
     'approval_requests',
@@ -118,19 +122,30 @@ declare
   ];
 begin
   foreach table_name in array application_tables loop
+    canonical_row_expression := 'to_jsonb(t) - ''search_vector''';
+    if table_name = 'life_recall_hits' then
+      -- PostgreSQL versions can render the same float8 bits differently in JSON.
+      -- Hash the IEEE-754 bytes so cross-version verification stays exact.
+      canonical_row_expression :=
+        '(to_jsonb(t) - ''search_vector'' - ''score'') || '
+        'jsonb_build_object(''score_float8_hex'', encode(float8send(t.score), ''hex''))';
+    end if;
+
     execute format(
       'insert into ultimate_hermes_migration_manifest
        select %L,
               count(*)::bigint,
               md5(coalesce(
                 string_agg(
-                  md5((to_jsonb(t) - ''search_vector'')::text),
-                  '''' order by md5((to_jsonb(t) - ''search_vector'')::text)
+                  md5((%s)::text),
+                  '''' order by md5((%s)::text)
                 ),
                 ''''
               ))
        from public.%I t',
       table_name,
+      canonical_row_expression,
+      canonical_row_expression,
       table_name
     );
   end loop;
@@ -175,6 +190,33 @@ docker exec \
 
 if $dry_run; then
   echo "Dry run complete. No target schema or data was changed."
+  exit 0
+fi
+
+if $verify_only; then
+  echo "Comparing existing target data with the source..."
+  target_integrity_manifest > "$target_manifest_after"
+  if ! diff -u "$source_manifest" "$target_manifest_after"; then
+    echo "Migration integrity verification failed. The local source database was not modified." >&2
+    exit 1
+  fi
+
+  report_dir="$report_root/$timestamp"
+  mkdir -p "$report_dir"
+  chmod 700 "$report_dir"
+  cp "$source_manifest" "$report_dir/source-manifest.tsv"
+  cp "$target_manifest_after" "$report_dir/target-manifest.tsv"
+  {
+    echo "timestamp_utc=$timestamp"
+    echo "source_container=$source_container"
+    echo "source_database=$source_database"
+    echo "verification=exact-row-count-and-content-checksum-match"
+    echo "mode=verify-only"
+  } > "$report_dir/migration-summary.txt"
+  chmod 600 "$report_dir"/*
+
+  echo "Migration verified. Exact row counts and content checksums match."
+  echo "Audit report: $report_dir"
   exit 0
 fi
 
