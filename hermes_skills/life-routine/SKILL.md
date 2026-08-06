@@ -17,21 +17,37 @@ decision recall.
 Core rule:
 
 ```text
-life_archive/Postgres is the durable source of truth.
+Supabase Postgres is the durable source of truth.
 Linear, Notion, Slack, Google Calendar, Google Drive, and Gmail are external
 surfaces or source inventories.
 ```
 
+## Memory Transport
+
+Choose exactly one write path for each conversation:
+
+1. On the primary Hermes gateway, use native `life_archive` tools when its
+   `LIFE_ARCHIVE_DATABASE_URL` points to the shared Supabase database.
+2. On another device or an untrusted runtime, use the remote Ultimate Hermes
+   MCP tools: `recall_events`, `project_status`, `timeline`, `capture_event`,
+   and `link_source`.
+3. Never capture the same event through both native `life_capture` and remote
+   `capture_event`. Supabase is shared, so dual writes create duplicate memory.
+4. Never distribute the Supabase database password to Codex, Claude, or a
+   secondary Hermes runtime. Give those clients only the HTTPS MCP URL and API
+   token.
+
 ## Always Do
 
 Before answering questions about past work, documents, incidents, disputes,
-decisions, or project history:
+decisions, or project history, use the active transport's equivalent tools:
 
-1. Call `life_recall` with the user's topic.
-2. If project-specific, call `life_project_status`.
-3. If chronology matters, call `life_timeline`.
+1. Call `life_recall` or `recall_events` with the user's topic.
+2. If project-specific, call `life_project_status` or `project_status`.
+3. If chronology matters, call `life_timeline` or `timeline`.
 4. State which facts are recalled, inferred, imported, or missing.
-5. Save new durable decisions with `life_capture`.
+5. Save new durable decisions with `life_capture` or `capture_event`, using
+   only the selected write path.
 
 Do not store raw secrets. Do not give legal advice; in legal-sensitive mode,
 organize evidence, dates, sources, and uncertainties.

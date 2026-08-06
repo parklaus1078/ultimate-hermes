@@ -52,7 +52,10 @@ export class HttpEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embed(text: string): Promise<number[]> {
-    const apiKey = await this.secretStore.get(this.keyRef.service, this.keyRef.account);
+    const apiKey =
+      process.env.HERMES_EMBEDDING_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      (await this.secretStore.get(this.keyRef.service, this.keyRef.account));
     if (!apiKey) {
       throw new Error(`Missing embedding API key in ${this.keyRef.service}/${this.keyRef.account}`);
     }

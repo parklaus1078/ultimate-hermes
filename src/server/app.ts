@@ -1,44 +1,76 @@
 import express from "express";
 import { loadConfig } from "../config/env.js";
 import { ApprovalRepository } from "../db/approvals.js";
-import { migrate } from "../db/client.js";
 import { EventRepository } from "../db/events.js";
-import { recordLinearWebhook } from "../adapters/linear/webhook.js";
-import { GoogleOAuthClient } from "../adapters/google/oauth.js";
-import { createSecretStore } from "../secrets/index.js";
-import { RecallService } from "../search/recall.js";
-import { LocalDeterministicEmbeddingProvider } from "../search/embedding-provider.js";
-import { requireRemoteAuth } from "../remote/auth.js";
+import { query } from "../db/client.js";
+import { handleMcpHttpRequest } from "../mcp/server.js";
+import { requireAllowedRemoteOrigin, requireRemoteAuth, requireRemoteWrites } from "../remote/auth.js";
 import { captureEvent, contextPack, recallEvents, recentEvents, timeline } from "../remote/tools.js";
-import { handleMcpRequest } from "../mcp/server.js";
+
+const version = "0.2.0";
 
 export function createApp() {
+  const config = loadConfig();
   const app = express();
+  app.disable("x-powered-by");
   app.use(express.json({ limit: "2mb" }));
 
-  app.post("/mcp", requireRemoteAuth, async (req, res, next) => {
+  const remoteGuards = [requireAllowedRemoteOrigin, requireRemoteAuth] as const;
+
+  app.get("/", (_req, res) => {
+    res.json({
+      service: "ultimate-hermes",
+      version,
+      mcp: "/mcp",
+      health: "/api/v1/health",
+      readiness: "/api/v1/ready"
+    });
+  });
+
+  app.post("/mcp", ...remoteGuards, async (req, res, next) => {
     try {
-      const response = await handleMcpRequest(req.body);
-      if (!response) {
-        res.status(202).json({ ok: true });
+      await handleMcpHttpRequest(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/mcp", ...remoteGuards, (_req, res) => {
+    res.setHeader("Allow", "POST");
+    res.status(405).json({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32000, message: "Standalone SSE streams are not supported. Use POST Streamable HTTP." }
+    });
+  });
+
+  app.delete("/mcp", ...remoteGuards, (_req, res) => {
+    res.setHeader("Allow", "POST");
+    res.status(405).json({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32000, message: "This server is stateless and has no session to delete." }
+    });
+  });
+
+  app.get("/api/v1/health", (_req, res) => {
+    res.json({ ok: true, service: "ultimate-hermes", version, uptimeSeconds: Math.floor(process.uptime()) });
+  });
+
+  app.get("/api/v1/ready", async (_req, res, next) => {
+    try {
+      const result = await query("select to_regclass('public.life_events') is not null as life_archive_ready");
+      if (!result.rows[0]?.life_archive_ready) {
+        res.status(503).json({ ok: false, service: "ultimate-hermes", database: "schema-missing" });
         return;
       }
-      res.json(response);
+      res.json({ ok: true, service: "ultimate-hermes", database: "ready" });
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/v1/health", async (_req, res, next) => {
-    try {
-      await migrate();
-      res.json({ ok: true, service: "ultimate-hermes", interfaces: ["api", "mcp"] });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/v1/events/recent", requireRemoteAuth, async (req, res, next) => {
+  app.get("/api/v1/events/recent", ...remoteGuards, async (req, res, next) => {
     try {
       res.json(await recentEvents(req.query));
     } catch (error) {
@@ -46,7 +78,7 @@ export function createApp() {
     }
   });
 
-  app.post("/api/v1/recall", requireRemoteAuth, async (req, res, next) => {
+  app.post("/api/v1/recall", ...remoteGuards, async (req, res, next) => {
     try {
       res.json(await recallEvents(req.body));
     } catch (error) {
@@ -54,7 +86,7 @@ export function createApp() {
     }
   });
 
-  app.get("/api/v1/timeline", requireRemoteAuth, async (req, res, next) => {
+  app.get("/api/v1/timeline", ...remoteGuards, async (req, res, next) => {
     try {
       res.json(await timeline(req.query));
     } catch (error) {
@@ -62,7 +94,7 @@ export function createApp() {
     }
   });
 
-  app.post("/api/v1/events", requireRemoteAuth, async (req, res, next) => {
+  app.post("/api/v1/events", ...remoteGuards, requireRemoteWrites, async (req, res, next) => {
     try {
       res.json(await captureEvent(req.body));
     } catch (error) {
@@ -70,7 +102,7 @@ export function createApp() {
     }
   });
 
-  app.post("/api/v1/context-pack", requireRemoteAuth, async (req, res, next) => {
+  app.post("/api/v1/context-pack", ...remoteGuards, async (req, res, next) => {
     try {
       res.type("text/markdown").send(await contextPack(req.body));
     } catch (error) {
@@ -78,79 +110,33 @@ export function createApp() {
     }
   });
 
-  app.get("/health", async (_req, res, next) => {
-    try {
-      await migrate();
-      res.json({ ok: true, service: "hermes" });
-    } catch (error) {
-      next(error);
-    }
-  });
+  if (config.enableLegacyRoutes) {
+    app.get("/health", (_req, res) => res.redirect(308, "/api/v1/health"));
+    app.get("/events/recent", ...remoteGuards, async (req, res, next) => {
+      try {
+        const limit = Number.parseInt(String(req.query.limit ?? "25"), 10);
+        res.json(await new EventRepository().listRecent(limit));
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.get("/approvals", ...remoteGuards, async (_req, res, next) => {
+      try {
+        res.json(await new ApprovalRepository().listPending());
+      } catch (error) {
+        next(error);
+      }
+    });
+  }
 
-  app.get("/events/recent", async (req, res, next) => {
-    try {
-      const limit = Number.parseInt(String(req.query.limit ?? "25"), 10);
-      res.json(await new EventRepository().listRecent(limit));
-    } catch (error) {
+  app.use((error: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) {
       next(error);
+      return;
     }
-  });
-
-  app.get("/remember", async (req, res, next) => {
-    try {
-      const q = String(req.query.q ?? "");
-      const limit = Number.parseInt(String(req.query.limit ?? "10"), 10);
-      const recall = new RecallService(undefined, new LocalDeterministicEmbeddingProvider());
-      res.json(await recall.remember({ queryText: q, limit }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/approvals", async (_req, res, next) => {
-    try {
-      res.json(await new ApprovalRepository().listPending());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/webhooks/linear", async (req, res, next) => {
-    try {
-      const eventId = await recordLinearWebhook(req.body as Record<string, unknown>);
-      res.json({ ok: true, eventId });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/oauth/google/start", async (_req, res, next) => {
-    try {
-      const config = loadConfig();
-      const redirectUri = `${config.publicBaseUrl}/oauth/google/callback`;
-      const url = await new GoogleOAuthClient(createSecretStore()).authUrl(redirectUri);
-      res.redirect(url);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/oauth/google/callback", async (req, res, next) => {
-    try {
-      const code = String(req.query.code ?? "");
-      if (!code) throw new Error("Missing Google OAuth code");
-      const config = loadConfig();
-      const redirectUri = `${config.publicBaseUrl}/oauth/google/callback`;
-      await new GoogleOAuthClient(createSecretStore()).exchangeCode(code, redirectUri);
-      res.type("text/plain").send("Google OAuth connected. You can close this tab.");
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const message = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ ok: false, error: message });
+    console.error(JSON.stringify({ level: "error", method: req.method, path: req.path, error: message }));
+    res.status(500).json({ ok: false, error: config.nodeEnv === "production" ? "Internal server error." : message });
   });
 
   return app;

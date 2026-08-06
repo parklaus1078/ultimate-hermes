@@ -1,584 +1,651 @@
 # Ultimate Hermes
 
-This repository now targets a native extension of the existing Nous Research
-Hermes Agent on this machine.
-
-The implementation direction is:
+Ultimate Hermes는 Codex, Claude Code, Nous Research Hermes Agent를 교체 가능한
+runtime으로 사용하면서, 모든 장기 기억을 하나의 Supabase Postgres에 보관하는
+개인용 memory service입니다.
 
 ```text
-Existing Hermes Agent = user interface, gateway, tools, skills, kanban
-life_archive provider = durable Postgres-backed long-term memory
-Docker Postgres + pgvector = source of truth for history and recall
-Linear MCP = active project execution surface
-Slack gateway = primary messaging interface
+Codex --------------------\
+Claude Code ---------------+--> HTTPS /mcp --> Ultimate Hermes container
+Hermes Agent (remote) -----/          |
+                                       +--> Supabase Postgres
+Hermes primary gateway ---------------/    life_* + FTS + pg_trgm + pgvector
+  (optional native DB access)
+
+Agent runtimes ----------------------------> Notion, Linear, Google, Slack
+                                             (external source surfaces)
 ```
 
-The older Node/TypeScript app in `src/` is kept as a prototype/reference. The
-main path is the Python Hermes memory provider in
-`hermes_plugins/life_archive/`.
+핵심 원칙은 다음과 같습니다.
 
-## Current Target
+- Agent는 대화와 도구 실행을 담당하는 runtime이다.
+- `public.life_*`가 장기 기억의 유일한 source of truth다.
+- Codex, Claude, 보조 Hermes에는 DB 비밀번호를 주지 않는다.
+- 원격 Agent는 HTTPS MCP URL과 API token만 사용한다.
+- Linear는 현재 실행할 티켓, Notion은 사람이 읽는 inventory다.
+- 같은 기억을 native `life_capture`와 MCP `capture_event`로 중복 저장하지 않는다.
 
-When setup is complete, Hermes should be able to answer questions like:
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/parklaus1078/ultimate-hermes)
 
-- What did I decide about this project?
-- What happened last time this broke?
-- What are the active blockers?
-- Show the timeline for this dispute.
-- What documents did I see related to this?
+## Current Status
 
-## Requirements
+| 영역 | 상태 |
+| --- | --- |
+| Supabase 호환 Postgres 스키마 | 구현 완료 |
+| FTS, `pg_trgm`, `pgvector(1536)` | 구현 완료 |
+| 공식 MCP SDK 기반 Streamable HTTP `/mcp` | 구현 완료 |
+| Bearer 인증, Host/Origin 검증, RLS hardening | 구현 완료 |
+| Render Docker Blueprint | 구현 완료 |
+| Codex, Claude, Hermes 설정 예시 | 구현 및 CLI 문법 검증 완료 |
+| 로컬 DB 전체 migration rehearsal | table별 row count와 content checksum 일치 검증 완료 |
+| 실제 Supabase project 생성 및 Render 배포 | 사용자 cloud credential 입력 후 수행 |
 
-- Existing Hermes Agent at `/Users/kay/.hermes/hermes-agent`
+2026-08-06 검증 시 로컬 원본에는 다음 데이터가 있었습니다. 실제 migration
+script는 실행 시점의 수치를 다시 계산합니다.
+
+| Table | Rows |
+| --- | ---: |
+| `life_events` | 822 |
+| `life_external_refs` | 205 |
+| `life_sources` | 243 |
+| `life_recall_hits` | 3373 |
+| `life_embeddings` | 0 |
+| legacy `events` | 4 |
+| legacy `embeddings` | 4 |
+| legacy `agent_runs` | 4 |
+
+로컬 원본 DB는 migration 과정에서 수정하거나 삭제하지 않습니다.
+
+## Prerequisites
+
 - Docker Desktop
-- Python 3.11 in the Hermes venv
-- Slack credentials for Hermes gateway setup
-- Linear account for native MCP OAuth
-- Optional later: Notion and Google OAuth credentials
+- Node.js 22 이상
+- npm
+- Supabase project 하나
+- GitHub에 push된 이 repository
+- Render account
+- 선택 사항: Nous Research Hermes Agent
 
-## Quick Start
+macOS의 현재 로컬 원본은 기본적으로 다음 컨테이너를 사용합니다.
 
-Run these from this repository:
-
-```bash
-cd /Users/kay/Desktop/dev/projects/ultimate-hermes
+```text
+container: ultimate-hermes-postgres
+host port: 127.0.0.1:55432
+database: hermes
 ```
 
-### 1. Start Postgres
+## Cloud Setup
+
+아래 순서를 그대로 따르면 기존 데이터를 Supabase로 옮긴 뒤 Render MCP 서버를
+배포할 수 있습니다.
+
+### 1. Install
 
 ```bash
+git clone https://github.com/parklaus1078/ultimate-hermes.git
+cd ultimate-hermes
+npm ci
+```
+
+이미 이 repository를 사용 중이면 현재 branch를 push하거나 default branch에
+merge한 뒤 진행합니다. Render Deploy button은 GitHub에 있는 코드를 사용합니다.
+
+### 2. Create Supabase Database
+
+1. Supabase에서 새 project를 생성합니다.
+2. 가능하면 Render service와 가까운 region을 선택합니다. 기본 Blueprint region은
+   Singapore입니다.
+3. Supabase dashboard의 **Connect**에서 Postgres connection string을 복사합니다.
+4. persistent container에는 **Session pooler**의 port `5432` URL을 권장합니다.
+5. URL 끝에 `sslmode=require`가 없다면 추가합니다.
+
+형식은 대략 다음과 같습니다. 예시를 그대로 사용하면 안 됩니다.
+
+```text
+postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+Dashboard가 출력한 URL을 그대로 사용하는 편이 안전합니다. 비밀번호의 특수문자를
+직접 조합할 경우에는 URL encoding이 필요합니다.
+
+현재 terminal session에 URL을 노출 없이 입력합니다.
+
+```bash
+printf 'Supabase session-pooler URL: '
+IFS= read -r -s SUPABASE_DATABASE_URL
+printf '\n'
+export SUPABASE_DATABASE_URL
+
+# 별도 direct URL이 필요하지 않으면 같은 session-pooler URL을 사용합니다.
+export SUPABASE_MIGRATION_DATABASE_URL="$SUPABASE_DATABASE_URL"
+```
+
+Supabase REST/Data API key는 이 서비스에 필요하지 않습니다. Postgres URL은 Render와
+신뢰된 primary Hermes에만 저장합니다.
+
+### 3. Freeze Writes And Inspect Migration
+
+최종 migration 동안에는 새 memory capture를 잠시 중단합니다.
+
+```bash
+hermes gateway stop
 docker compose up -d postgres
+scripts/migrate_local_db_to_supabase.sh --dry-run
 ```
 
-This starts `ultimate-hermes-postgres` on local port `55432` with `pgvector`
-available.
+`--dry-run`은 원본 table별 row count/content checksum과 대상 연결만 확인하며 대상
+schema나 data를 변경하지 않습니다.
 
-### 2. Install Python Dependency Into Hermes
+### 4. Migrate Existing Data
+
+대상 Supabase database가 비어 있는 상태에서 실행합니다.
 
 ```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python -m pip install -r requirements-life-archive.txt
+scripts/migrate_local_db_to_supabase.sh
 ```
 
-### 3. Install The Native Provider
+script가 수행하는 작업은 다음과 같습니다.
 
-```bash
-bash scripts/install_life_archive.sh
-bash scripts/install_life_routine_skill.sh
-```
+1. 로컬 Docker Postgres의 모든 canonical/legacy application table 수를 기록합니다.
+2. Supabase에 `0001`부터 `0003`까지 schema migration을 적용합니다.
+3. 대상에 기존 application row가 있으면 기본적으로 중단합니다.
+4. mode `700` 임시 directory에 private custom-format dump를 만듭니다.
+5. `pg_restore --single-transaction`으로 data를 복원합니다.
+6. 모든 application table의 source/target row count와 canonical row content
+   checksum을 정확히 비교합니다.
+7. `migration-reports/<timestamp>/`에 source/target integrity manifest와 dump
+   checksum을 남깁니다.
+8. dump는 성공과 실패 여부에 관계없이 기본적으로 삭제합니다.
 
-This copies:
+성공 출력은 다음 문장을 포함합니다.
 
 ```text
-hermes_plugins/life_archive -> /Users/kay/.hermes/plugins/life_archive
-hermes_skills/life-routine -> /Users/kay/.hermes/skills/productivity/life-routine
+Migration verified. Exact row counts and content checksums match.
 ```
 
-If an older installed copy exists, the script backs it up under
-`/Users/kay/.hermes/backups/`.
+`--allow-nonempty`는 duplicate key와 merge 결과를 직접 검토한 경우에만 사용합니다.
+일반적인 재시도는 빈 Supabase project/database를 준비하는 편이 안전합니다.
 
-### 4. Configure Hermes Native Baseline
+### 5. Generate MCP API Token
 
 ```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/configure_hermes_native.py
-```
-
-This backs up `/Users/kay/.hermes/config.yaml`, then sets:
-
-- `memory.provider: life_archive`
-- `plugins.life_archive.database_url`
-- Linear and Notion native MCP config
-- Codex as the main model/provider path if not already set
-- Slack as the intended gateway platform without inventing Slack tokens
-
-### 5. Create Native Hermes Role Profiles
-
-```bash
-scripts/create_hermes_life_profiles.sh
-```
-
-This creates native Hermes profiles cloned from `default`, installs
-`life_archive` into each profile, and sets descriptions for kanban routing:
-
-```text
-chief_of_staff
-capture_router
-project_operator
-archivist
-evidence_curator
-research_librarian
-troubleshooting_scribe
-integration_clerk
-security_officer
-```
-
-The default profile remains the Slack gateway profile. The role profiles are
-available as isolated Hermes workers through wrapper commands such as
-`chief_of_staff`, `archivist`, and `project_operator`.
-
-### 6. Install Daily Operating Policy
-
-```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/install_hermes_soul_policy.py
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/disable_hermes_skill.py apple-app-automation
-```
-
-This installs the global rule that schedule/calendar questions must use the
-Google Workspace API and disables local macOS app automation so Hermes does not
-open Apple Calendar for schedule recall.
-
-### 7. Verify Provider Locally
-
-```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/life_archive_smoke.py
-```
-
-Expected result:
-
-- one `life_capture` JSON result
-- one `life_recall` JSON result with at least one match
-
-### 8. Restart Hermes Gateway
-
-```bash
-hermes gateway restart
-```
-
-If the service command is unavailable, use:
-
-```bash
-launchctl kickstart -k gui/$(id -u)/ai.hermes.gateway
-```
-
-### 9. Check Hermes Memory
-
-```bash
-hermes memory status
-```
-
-Expected:
-
-```text
-Provider: life_archive
-```
-
-## Slack Gateway Setup
-
-Slack must be configured through Hermes Agent, not through this repository's
-standalone server.
-
-Current local status, checked on 2026-07-06:
-
-- Gateway process is running.
-- Slack Socket Mode connects.
-- Hermes Slack manifest was regenerated at `/Users/kay/.hermes/slack-manifest.json`,
-  validated, and pushed to Slack app `A0BC04LECEP`.
-- The remaining blocker is OAuth token state: `SLACK_BOT_TOKEN` is currently
-  not a Bot User OAuth token. It must start with `xoxb-...`; the current token
-  has only Slack app-configuration scopes, so Slack rejects `chat.postMessage`
-  and channel reads with `missing_scope`.
-
-Fix:
-
-1. Open `https://api.slack.com/apps/A0BC04LECEP`.
-2. Go to **OAuth & Permissions**.
-3. Click **Reinstall to Workspace** after the manifest update.
-4. Copy **Bot User OAuth Token**. It must start with `xoxb-`.
-5. Update Hermes `.env` without printing the token:
-
-```bash
-python3 scripts/set_hermes_env_secret.py SLACK_BOT_TOKEN --must-start xoxb-
-```
-
-Keep `SLACK_APP_TOKEN` as the `xapp-...` Socket Mode token. If you ever replace
-it, the app-level token needs `connections:write`.
-
-Restart and verify:
-
-```bash
-hermes gateway restart
-tail -n 80 /Users/kay/.hermes/logs/gateway.log
-```
-
-Expected: no new `missing_scope` errors, and Slack DMs or mentions receive a
-Hermes response. If needed, rerun the interactive gateway setup:
-
-```bash
-hermes gateway setup
-```
-
-Choose Slack and provide the same `xoxb-...` bot token and `xapp-...` app token.
-
-## Linear MCP Setup
-
-Linear should use Hermes native MCP.
-
-The config script adds this server entry:
-
-```yaml
-mcp_servers:
-  linear:
-    url: https://mcp.linear.app/mcp
-    auth: oauth
-```
-
-Then run:
-
-```bash
-hermes mcp login linear
-hermes mcp configure linear
-hermes gateway restart
-```
-
-Linear is only the active execution surface. The durable historical record
-stays in Postgres through `life_archive`.
-
-## Notion And Google
-
-Current intended roles:
-
-- Notion: readable decision/document/incident inventory
-- Google Calendar: meetings and deadlines
-- Google Drive: document/source references
-- Gmail: communication/source references
-
-Default mode should be read/import. External writes should require approval.
-
-### Notion
-
-Hermes has both paths configured:
-
-- Official remote Notion MCP at `https://mcp.notion.com/mcp` for live Notion
-  access inside Hermes sessions.
-- Local repository adapter for connectivity checks and starter database
-  creation.
-
-These use different auth stores. The remote MCP uses Notion OAuth cached by
-Hermes under `~/.hermes/mcp-tokens`; the local adapter uses the integration
-token below.
-
-Finish Notion MCP OAuth from a normal interactive Terminal:
-
-```bash
-hermes mcp login notion
-hermes mcp test notion
-hermes gateway restart
-```
-
-The local adapter checks credentials in this order:
-
-1. macOS Keychain `service=hermes-notion`, `account=default`
-2. `NOTION_API_KEY`
-3. `NOTION_API_TOKEN`
-
-The Node CLI also loads `/Users/kay/.hermes/.env`, matching the Hermes skill
-location.
-
-1. Create an integration at `https://www.notion.so/my-integrations`.
-2. Copy the integration secret. It usually starts with `ntn_` or `secret_`.
-3. Share the target parent page with the integration in Notion:
-   page menu `...` -> `Connect to` -> your integration.
-4. Store the token in macOS Keychain:
-
-```bash
-npm run build
-python3 scripts/set_macos_keychain_secret.py hermes-notion default
-```
-
-The script uses a hidden Python prompt and passes the token to macOS Keychain
-through stdin, so the token is not written to shell history or passed as a
-process argument. It also verifies that the item exists immediately after
-storing it.
-
-5. Check connectivity:
-
-```bash
-npm run cli -- sync notion
-```
-
-6. Optional: create the starter Hermes inventory databases under a parent page:
-
-```bash
-npm run cli -- sync notion-create-databases NOTION_PARENT_PAGE_ID
-```
-
-Use Notion as the readable inventory. The canonical durable memory stays in
-Postgres through `life_archive`.
-
-If Notion pages/databases appear in the browser but `npm run cli -- sync notion`
-reports "missing", the token was probably used from a one-off shell environment
-or a different tool. Persist it to one of the locations above.
-
-### Google Calendar, Drive, Gmail
-
-Hermes has a bundled `google-workspace` skill with its own OAuth setup script.
-Use this for the native Hermes runtime:
-
-```bash
-scripts/google_workspace_setup.sh --check
-```
-
-Do not install random `hermes skills search google-workspace` results for this
-setup. The search results are community skills; this repository uses the local
-bundled Nous Research skill already present under
-`/Users/kay/.hermes/hermes-agent/skills/productivity/google-workspace`.
-
-If not authenticated:
-
-1. Create/select a Google Cloud project:
-   `https://console.cloud.google.com/projectselector2/home/dashboard`
-2. Enable the APIs you need:
-   Gmail API, Google Calendar API, Google Drive API, Google Docs API,
-   Google Sheets API, and People API.
-3. Create an OAuth 2.0 Client ID at
-   `https://console.cloud.google.com/apis/credentials`.
-4. Application type: **Desktop app**.
-5. If the app is in Testing, add your Google account as a test user at
-   `https://console.cloud.google.com/auth/audience`.
-6. Download the OAuth client JSON.
-7. Store it and generate an auth URL:
-
-```bash
-scripts/google_workspace_setup.sh --client-secret /path/to/client_secret.json
-scripts/google_workspace_setup.sh --auth-url
-```
-
-8. Open the printed URL, approve, then copy the full redirected URL from the
-   browser address bar. The browser may fail on `http://localhost:1`; that is
-   expected.
-9. Exchange it:
-
-```bash
-scripts/google_workspace_setup.sh --auth-code "PASTE_FULL_REDIRECT_URL_OR_CODE"
-scripts/google_workspace_setup.sh --check
-```
-
-The Hermes skill stores tokens at `/Users/kay/.hermes/google_token.json` and
-refreshes them automatically.
-
-Schedule/calendar questions must use the Google Workspace API script, not
-browser UI, Chrome, macOS Calendar, or Apple Calendar:
-
-```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python /Users/kay/.hermes/hermes-agent/skills/productivity/google-workspace/scripts/google_api.py calendar list --start <ISO_START> --end <ISO_END>
-```
-
-Use `Asia/Seoul` for date ranges. For "이번주", query Monday 00:00 through
-Sunday 23:59:59. If the API fails, Hermes should report the API failure instead
-of falling back to a GUI calendar.
-
-Privacy note: this bundled setup script currently requests broad Workspace
-scopes, including Gmail send/modify, Calendar, Drive, Docs, Sheets, and
-Contacts read. For a strict read/import-only setup, do not approve the OAuth
-screen until the scopes are narrowed or you use a dedicated Google account.
-
-## Remote MCP/API Access Over Tailscale
-
-Goal: PC agents such as Claude Code, Codex, or PC Hermes should treat AI as a
-runtime and retrieve shared context from the same Ultimate Hermes data layer.
-Do **not** expose Postgres directly to agents. Expose only the authenticated API
-or MCP interface and keep Postgres bound to localhost/private Docker networking.
-
-### MacBook server environment
-
-Bind the server to the MacBook's Tailscale IP, not `0.0.0.0`:
-
-```bash
-cd /Users/kay/Desktop/dev/projects/ultimate-hermes
-TAILSCALE_IP="$(tailscale ip -4 | head -n 1)"
-export HERMES_HOST="$TAILSCALE_IP"
-export HERMES_PORT=8787
-export HERMES_PUBLIC_BASE_URL="http://${TAILSCALE_IP}:8787"
 export HERMES_API_TOKEN="$(openssl rand -hex 32)"
-npm run build
-npm start
 ```
 
-Persist `HERMES_API_TOKEN` in a local secret store or `.env` file that is not
-committed. Do not paste it into chat, git, Linear, Notion, or logs.
-
-### API examples
+이 값은 password manager에 저장합니다. macOS에서 화면에 출력하지 않고 clipboard로
+보내려면 다음을 사용합니다.
 
 ```bash
-AUTH_HEADER="Authorization: Bearer ${HERMES_API_TOKEN}"
-
-curl -H "$AUTH_HEADER" \
-  "http://${TAILSCALE_IP}:8787/api/v1/events/recent?limit=5"
-
-curl -H "$AUTH_HEADER" \
-  -H "content-type: application/json" \
-  -d '{"query":"Personal Operating System: Notion + Linear Tracking","limit":5}' \
-  "http://${TAILSCALE_IP}:8787/api/v1/recall"
-
-curl -H "$AUTH_HEADER" \
-  -H "content-type: application/json" \
-  -d '{"query":"Nimble KAY-68","limit":8}' \
-  "http://${TAILSCALE_IP}:8787/api/v1/context-pack"
+printf '%s' "$HERMES_API_TOKEN" | pbcopy
 ```
 
-Available API routes:
+Server에서는 이름이 `HERMES_API_TOKEN`이고, client에서는 같은 값을
+`ULTIMATE_HERMES_API_TOKEN`으로 사용합니다.
 
-- `GET /api/v1/health` — unauthenticated health check
-- `GET /api/v1/events/recent?limit=25` — recent Life Archive records
-- `POST /api/v1/recall` — `{ "query": string, "limit"?: number }`
-- `GET /api/v1/timeline?topic=...&limit=100`
-- `POST /api/v1/context-pack` — Markdown context pack for agents
-- `POST /api/v1/events` — durable write; use only with explicit approval/policy
+### 6. Deploy To Render
 
-### MCP examples
+README 상단의 **Deploy to Render** button을 누르거나 Render에서 이 repository의
+`render.yaml`을 Blueprint로 import합니다.
 
-For MCP-over-HTTP clients, point them at:
+Render가 묻는 두 secret을 입력합니다.
+
+| Render variable | 값 |
+| --- | --- |
+| `HERMES_DATABASE_URL` | Supabase session-pooler URL |
+| `HERMES_API_TOKEN` | 위에서 생성한 64자리 hex token |
+
+Blueprint의 기본 동작은 다음과 같습니다.
+
+- Dockerfile build
+- Singapore region
+- Starter instance
+- `GET /api/v1/ready` readiness check
+- remote append-only writes enabled
+- legacy HTTP routes disabled
+- embedding API disabled
+- DB pool 최대 5 connections
+
+Starter는 cold start 없는 개인 서비스에 적합한 기본값입니다. 비용을 우선하면 Render
+dashboard에서 지원되는 더 작은 plan으로 바꿀 수 있지만, sleep/cold start 때문에 MCP
+client timeout이 발생할 수 있습니다.
+
+동일한 Docker image는 Render 대신 Azure Container Apps, Google Cloud Run,
+AWS ECS/Fargate, Railway, Fly.io에도 배포할 수 있습니다. 필요한 runtime contract는
+다음뿐입니다.
 
 ```text
-http://<macbook-tailscale-ip>:8787/mcp
+PORT=<platform assigned port>
+NODE_ENV=production
+HERMES_DATABASE_URL=<Supabase session-pooler URL>
+HERMES_API_TOKEN=<random secret>
 ```
 
-with an HTTP `Authorization` header if the client supports custom headers.
-The endpoint implements MCP JSON-RPC methods `initialize`, `tools/list`, and
-`tools/call` for:
+Netlify Functions는 이 버전의 기본 target이 아닙니다. persistent Express process,
+Postgres pool, startup migration을 그대로 사용할 수 있는 container platform이 더
+단순합니다.
 
-- `recent_events`
-- `recall_events`
-- `timeline`
-- `context_pack`
-- `capture_event`
+### 7. Verify Deployment
 
-For clients that support only stdio MCP, use Tailscale SSH to run the server on
-the MacBook while keeping DB access local to the MacBook:
+배포 후 URL을 설정합니다.
+
+```bash
+export ULTIMATE_HERMES_BASE_URL="https://YOUR-SERVICE.onrender.com"
+export ULTIMATE_HERMES_MCP_URL="$ULTIMATE_HERMES_BASE_URL/mcp"
+export ULTIMATE_HERMES_API_TOKEN="$HERMES_API_TOKEN"
+```
+
+Liveness와 DB readiness를 확인합니다.
+
+```bash
+curl -fsS "$ULTIMATE_HERMES_BASE_URL/api/v1/health"
+curl -fsS "$ULTIMATE_HERMES_BASE_URL/api/v1/ready"
+```
+
+MCP initialize를 확인합니다.
+
+```bash
+curl -fsS "$ULTIMATE_HERMES_MCP_URL" \
+  -H "Authorization: Bearer $ULTIMATE_HERMES_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"manual-smoke","version":"1.0.0"}}}'
+```
+
+`401`이면 token이 다르고, `403`이면 Host 또는 Origin allowlist가 맞지 않습니다.
+
+## Connect Agents
+
+모든 remote agent는 같은 MCP URL을 사용합니다.
+
+```text
+https://YOUR-SERVICE.onrender.com/mcp
+```
+
+각 장비에서 token을 환경 변수로 준비하되 `.zshrc`, git, Notion, Linear, Slack message에
+평문으로 남기지 않는 것을 권장합니다.
+
+```bash
+printf 'Ultimate Hermes API token: '
+IFS= read -r -s ULTIMATE_HERMES_API_TOKEN
+printf '\n'
+export ULTIMATE_HERMES_API_TOKEN
+export ULTIMATE_HERMES_MCP_URL="https://YOUR-SERVICE.onrender.com/mcp"
+```
+
+### Codex
+
+한 번만 실행합니다.
+
+```bash
+codex mcp add ultimate-hermes \
+  --url "$ULTIMATE_HERMES_MCP_URL" \
+  --bearer-token-env-var ULTIMATE_HERMES_API_TOKEN
+
+codex mcp list
+```
+
+동일한 설정을 `~/.codex/config.toml`에 직접 추가할 수도 있습니다.
+
+```toml
+[mcp_servers.ultimate-hermes]
+url = "https://YOUR-SERVICE.onrender.com/mcp"
+bearer_token_env_var = "ULTIMATE_HERMES_API_TOKEN"
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+```
+
+template은 `examples/mcp/codex-config.toml`에 있습니다. Codex를 시작한 process가
+`ULTIMATE_HERMES_API_TOKEN`을 상속해야 합니다.
+
+### Claude Code
+
+Project scope 설정은 token 값 대신 환경 변수 placeholder를 저장합니다.
+
+```bash
+claude mcp add --scope project --transport http \
+  ultimate-hermes "$ULTIMATE_HERMES_MCP_URL" \
+  --header 'Authorization: Bearer ${ULTIMATE_HERMES_API_TOKEN}'
+
+claude mcp list
+```
+
+생성되는 `.mcp.json` 형식은 다음과 같습니다.
 
 ```json
 {
   "mcpServers": {
     "ultimate-hermes": {
-      "command": "ssh",
-      "args": [
-        "kay@<macbook-tailnet-name-or-ip>",
-        "cd /Users/kay/Desktop/dev/projects/ultimate-hermes && node dist/src/mcp/server.js"
-      ]
+      "type": "http",
+      "url": "https://YOUR-SERVICE.onrender.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ULTIMATE_HERMES_API_TOKEN}"
+      }
     }
   }
 }
 ```
 
-This keeps Claude Code/Codex on the PC as interchangeable runtimes while the
-shared data remains in Postgres/Life Archive.
+공용 template은 `examples/mcp/claude-mcp.json`에 있습니다. 여러 project에서 쓰려면
+`--scope user`를 사용합니다.
 
-## Provider Tools
+### Hermes Agent: Remote MCP
 
-`life_archive` exposes these Hermes tools:
-
-- `life_capture`: save durable events, decisions, incidents, research notes,
-  legal-sensitive evidence notes, and project updates
-- `life_recall`: keyword/fuzzy recall from Postgres, plus semantic pgvector
-  recall when embeddings are configured
-- `life_timeline`: chronological reconstruction
-- `life_link_source`: attach raw source references
-- `life_project_status`: summarize recent project history and blockers
-
-Postgres has `pgvector` enabled from the start. Keyword and fuzzy recall work
-without embeddings; semantic embeddings can be added later without changing
-the provider contract.
-
-## Semantic Embeddings
-
-`life_archive` can store semantic recall vectors in `life_embeddings`. The
-default provider is OpenAI embeddings with `text-embedding-3-small`
-(`1536` dimensions), which matches the current pgvector schema.
-
-Store the embedding API key in macOS Keychain:
+다른 기기의 Hermes 또는 DB credential을 갖지 않는 Hermes에는 remote MCP를
+설정합니다.
 
 ```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/set_macos_keychain_secret.py hermes-embedding default
+"$HOME/.hermes/hermes-agent/venv/bin/python" \
+  scripts/configure_hermes_remote_mcp.py \
+  --url "$ULTIMATE_HERMES_MCP_URL"
+
+hermes mcp test ultimate-hermes
+hermes mcp configure ultimate-hermes
+hermes gateway restart
 ```
 
-Preview eligible records without calling the embedding API:
+설정 script는 다음을 수행합니다.
+
+- token을 hidden prompt로 받습니다.
+- `~/.hermes/.env`에 mode `600`으로 저장합니다.
+- `~/.hermes/config.yaml`에는 `${MCP_ULTIMATE_HERMES_API_KEY}` placeholder만 씁니다.
+- 기존 config를 `~/.hermes/backups/`에 backup합니다.
+
+### Hermes Agent: Primary Native Provider
+
+Slack gateway를 운영하는 신뢰된 primary Mac에서는 remote hop 없이 native
+`life_archive` provider가 Supabase에 직접 연결할 수 있습니다.
 
 ```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/backfill_life_embeddings.py --source-system llm_wiki --dry-run
+"$HOME/.hermes/hermes-agent/venv/bin/python" -m pip install \
+  -r requirements-life-archive.txt
+bash scripts/install_life_archive.sh
+bash scripts/install_life_routine_skill.sh
+
+"$HOME/.hermes/hermes-agent/venv/bin/python" \
+  scripts/set_hermes_env_secret.py LIFE_ARCHIVE_DATABASE_URL
+
+"$HOME/.hermes/hermes-agent/venv/bin/python" \
+  scripts/configure_hermes_native.py
+
+hermes gateway restart
+hermes memory status
 ```
 
-Backfill imported `llm_wiki` memories:
+`LIFE_ARCHIVE_DATABASE_URL` prompt에는 같은 Supabase session-pooler URL을 넣습니다.
+Provider는 이 환경 변수를 config의 local DSN보다 우선합니다.
+
+Primary Hermes에서는 native `life_capture`를 사용하고 remote `capture_event`는 사용하지
+않습니다. Secondary Hermes에서는 반대로 remote MCP만 사용합니다. 두 경로는 같은
+Supabase에 쓰기 때문에 동시에 사용하면 duplicate memory가 생깁니다.
+
+## MCP Tools
+
+| Tool | 기능 |
+| --- | --- |
+| `recent_events` | 최근 canonical memory 조회 |
+| `recall_events` | FTS, fuzzy, 선택적 pgvector recall |
+| `timeline` | topic/project/분쟁의 시간순 history |
+| `context_pack` | 다른 agent가 바로 읽을 Markdown context 생성 |
+| `project_status` | project history, event type, blocker 요약 |
+| `memory_status` | table count와 pgvector version 확인 |
+| `capture_event` | append-only durable event 저장 |
+| `link_source` | event에 URL/file/evidence reference 연결 |
+
+Update와 delete tool은 의도적으로 제공하지 않습니다. Capture tool에는 password,
+API token, private key를 전달하면 안 됩니다.
+
+Remote write를 일시적으로 막으려면 Render에서 다음을 설정하고 redeploy합니다.
+
+```text
+HERMES_ALLOW_REMOTE_WRITES=false
+```
+
+## Semantic Recall
+
+pgvector schema와 HNSW index는 기본 migration에 포함됩니다. 그러나 embedding API는
+기본적으로 꺼져 있습니다. 기존 검증 baseline의 `life_embeddings`도 0건이므로 처음에는
+FTS와 fuzzy recall이 동작합니다.
+
+새 capture와 query에 OpenAI embedding을 사용하려면 Render에 다음 secret/config를
+추가합니다.
+
+```text
+HERMES_EMBEDDING_PROVIDER=http
+HERMES_EMBEDDING_API_KEY=<OpenAI API key>
+HERMES_EMBEDDING_MODEL=text-embedding-3-small
+HERMES_EMBEDDING_DIMENSIONS=1536
+HERMES_EMBED_LEGAL_SENSITIVE=false
+```
+
+기존 Supabase event를 backfill하려면 신뢰된 Mac에서 실행합니다.
 
 ```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/backfill_life_embeddings.py --source-system llm_wiki
+"$HOME/.hermes/hermes-agent/venv/bin/python" \
+  scripts/set_macos_keychain_secret.py hermes-embedding default
+
+export LIFE_ARCHIVE_DATABASE_URL="$SUPABASE_DATABASE_URL"
+
+"$HOME/.hermes/hermes-agent/venv/bin/python" \
+  scripts/backfill_life_embeddings.py \
+  --dry-run
+
+"$HOME/.hermes/hermes-agent/venv/bin/python" \
+  scripts/backfill_life_embeddings.py
+
+unset LIFE_ARCHIVE_DATABASE_URL
 ```
 
-By default, `legal_sensitive` records are excluded. To embed them anyway, pass
-`--include-legal` only after explicitly deciding that the legal-sensitive text
-may be sent to the embedding provider.
+`legal_sensitive` event는 기본적으로 외부 embedding provider에 보내지 않습니다.
+`--include-legal`은 해당 내용을 외부 provider로 보내도 된다고 명시적으로 결정한 경우에만
+사용합니다.
 
-Useful verification query:
+## SaaS Integrations
 
-```sql
-select embedding_model, count(*)
-from life_embeddings
-group by embedding_model
-order by embedding_model;
-```
+Ultimate Hermes MCP는 memory layer입니다. Linear, Notion, Google Calendar, Drive,
+Gmail, Slack 자체의 live API를 대신하지 않습니다. Agent에는 필요한 SaaS MCP/Skill과
+Ultimate Hermes를 함께 연결합니다.
 
-## Tests
+| System | 역할 |
+| --- | --- |
+| Linear | 현재 실행할 project/issue board |
+| Notion | 사람이 읽는 decision/document inventory |
+| Google Calendar | 일정과 deadline 원본 |
+| Google Drive/Gmail | 문서와 communication source |
+| Slack | primary Hermes gateway |
+| Supabase Life Archive | 장기 history와 모든 durable summary |
 
-Provider unit tests:
+외부 SaaS의 원문 전체를 무조건 복제하기보다, durable event와 source URL/external ID를
+Life Archive에 남기는 방식이 기본입니다.
+
+## Local Development
+
+Postgres만 시작합니다.
 
 ```bash
-python3 -m unittest discover -s tests/life_archive
-```
-
-Node prototype tests:
-
-```bash
-npm test
-npm run typecheck
-```
-
-Provider smoke test against Docker Postgres:
-
-```bash
-/Users/kay/.hermes/hermes-agent/venv/bin/python scripts/life_archive_smoke.py
-```
-
-## Legacy Node Prototype
-
-The Node app still supports:
-
-- Dockerized HTTP server
-- TypeScript CLI
-- append-first ledger
-- initial Linear/Notion/Google adapter experiments
-
-It is not the main Hermes integration path anymore.
-
-Useful legacy commands:
-
-```bash
-npm install
-npm run build
+docker compose up -d postgres
+npm ci
 npm run db:migrate
-npm run cli -- capture "test memory" --type decision
-npm run cli -- remember "test memory"
 ```
 
-## Docs
+Node server를 host에서 실행합니다.
 
-- Native pivot plan: `docs/hermes-native-pivot-plan.md`
-- Earlier standalone plan, now superseded: `docs/hermes-implementation-plan.md`
-- Architecture HTML: `docs/hermes-agent-architecture.html`
-- Phase 7 runbook: `docs/hermes-phase7-runbook.md`
+```bash
+export HERMES_DATABASE_URL='postgres://hermes:hermes@127.0.0.1:55432/hermes'
+export HERMES_API_TOKEN='local-test-token'
+export HERMES_ALLOW_REMOTE_WRITES=true
+npm run build
+npm start
+```
 
-## Safety Rules
+또는 app profile 전체를 Docker로 실행합니다.
 
-- Do not store raw API tokens in Postgres, Notion, logs, memory files, or git.
-- Back up `/Users/kay/.hermes/config.yaml` before overwriting it.
-- Postgres is the durable source of truth.
-- Linear is for selected active tickets only.
-- Legal-sensitive records are evidence timelines, not legal advice.
-- Docker Postgres stays bound to `127.0.0.1`. For remote agent access, bind the
-  Node API to the MacBook's Tailscale IP plus `HERMES_API_TOKEN`; do not expose
-  Postgres or the Node server on public `0.0.0.0`.
-- Run `scripts/harden_hermes_permissions.sh` after credential setup or profile
-  regeneration to keep tokens, Google OAuth files, state DBs, and profile
-  configs at `600`/`700`.
-- Linear, Notion, Google, Slack file, and email writes require explicit current
-  conversation approval before execution.
-- For a stronger local DB posture, set `HERMES_POSTGRES_PASSWORD` before first
-  `docker compose up`; existing Docker volumes keep the password they were
-  initialized with.
+```bash
+docker compose --profile app up --build
+```
+
+로컬 endpoint는 `http://127.0.0.1:8787/mcp`입니다. HTTP local test에서만 Hermes
+configuration helper의 `--allow-http-localhost`를 사용할 수 있습니다.
+
+## HTTP Endpoints
+
+| Method/Path | Auth | 설명 |
+| --- | --- | --- |
+| `GET /api/v1/health` | 없음 | process liveness |
+| `GET /api/v1/ready` | 없음 | DB와 canonical schema readiness |
+| `POST /mcp` | Bearer | Streamable HTTP MCP |
+| `GET /api/v1/events/recent` | Bearer | 최근 memory |
+| `POST /api/v1/recall` | Bearer | recall API |
+| `GET /api/v1/timeline` | Bearer | timeline API |
+| `POST /api/v1/context-pack` | Bearer | Markdown context |
+| `POST /api/v1/events` | Bearer + writes enabled | append-only capture |
+
+`GET /mcp`와 `DELETE /mcp`는 stateless server이므로 `405`를 반환합니다. Client는
+Streamable HTTP `POST`를 지원해야 합니다. 구형 HTTP+SSE 전용 client는 업그레이드가
+필요합니다.
+
+## Security Model
+
+- Production startup은 `HERMES_API_TOKEN`이 없으면 실패합니다.
+- MCP와 private API는 constant-time Bearer token 비교를 사용합니다.
+- browser `Origin`은 allowlist에 없으면 `403`입니다.
+- Host header도 Render hostname 또는 명시적 allowlist와 일치해야 합니다.
+- Supabase의 `anon`, `authenticated` role은 application table 권한이 revoke됩니다.
+- canonical/legacy table과 migration metadata table에 RLS가 활성화됩니다.
+- Docker image는 non-root `node` user로 실행됩니다.
+- DB credential은 server와 선택적인 primary Hermes에만 둡니다.
+- Readiness/health는 공개지만 memory content를 반환하지 않습니다.
+- 현재 인증은 single-tenant static token입니다. 다중 사용자 서비스로 전환할 때는
+  MCP OAuth 2.1과 per-user authorization을 추가해야 합니다.
+
+Custom domain을 사용하면 다음 중 하나를 Render에 설정합니다.
+
+```text
+HERMES_PUBLIC_BASE_URL=https://memory.example.com
+```
+
+또는 여러 host를 허용합니다.
+
+```text
+HERMES_ALLOWED_HOSTS=memory.example.com,ultimate-hermes-mcp.onrender.com
+```
+
+Browser application에서 직접 MCP를 호출할 때만 정확한 Origin을 추가합니다.
+
+```text
+HERMES_ALLOWED_ORIGINS=https://trusted-client.example.com
+```
+
+## Operations And Rollback
+
+### Rotate MCP Token
+
+1. 새 `openssl rand -hex 32` token을 생성합니다.
+2. Render의 `HERMES_API_TOKEN`을 바꾸고 redeploy합니다.
+3. 각 client의 `ULTIMATE_HERMES_API_TOKEN`을 바꿉니다.
+4. Hermes remote helper를 다시 실행하고 gateway를 restart합니다.
+
+### Roll Back To Local Database
+
+Cloud 검증이 실패해도 로컬 Docker volume은 그대로 남습니다.
+
+1. Primary Hermes의 `LIFE_ARCHIVE_DATABASE_URL`을 local DSN으로 되돌립니다.
+2. `hermes gateway restart`를 실행합니다.
+3. Remote agents는 cloud MCP를 disable하거나 기존 private endpoint로 되돌립니다.
+4. Supabase target을 수정한 뒤 빈 target에서 migration을 다시 수행합니다.
+
+로컬 source volume을 지우거나 덮어쓴 뒤 cloud를 검증하는 순서는 사용하지 않습니다.
+
+### Backups
+
+Supabase의 backup/PITR 정책은 선택한 plan을 확인합니다. 별도 보관이 필요하면 정기적으로
+encrypted `pg_dump`를 만들고 DB password와 다른 위치에 보관합니다. Life Archive는
+개인, career, legal-sensitive 정보를 포함할 수 있으므로 public bucket에 dump를 두면
+안 됩니다.
+
+## Troubleshooting
+
+### `/api/v1/ready`가 실패함
+
+- `HERMES_DATABASE_URL`이 session-pooler port `5432`인지 확인합니다.
+- URL에 `sslmode=require`가 있는지 확인합니다.
+- Supabase password와 project reference를 다시 확인합니다.
+- Render log에서 startup migration 오류를 확인합니다.
+
+### MCP가 `401`을 반환함
+
+Server의 `HERMES_API_TOKEN`과 client의 `ULTIMATE_HERMES_API_TOKEN` 값이 달라졌습니다.
+token을 URL query나 config에 직접 넣지 말고 environment/header로 전달합니다.
+
+### MCP가 `403 Host is not allowed`를 반환함
+
+Custom domain을 `HERMES_PUBLIC_BASE_URL` 또는 `HERMES_ALLOWED_HOSTS`에 추가합니다.
+
+### Hermes가 disconnected라고 표시함
+
+```bash
+hermes mcp test ultimate-hermes
+hermes mcp configure ultimate-hermes
+hermes gateway restart
+```
+
+URL이 `/mcp`로 끝나는지, `~/.hermes/.env`에
+`MCP_ULTIMATE_HERMES_API_KEY` key가 있는지 확인합니다. 값을 terminal에 출력할 필요는
+없습니다.
+
+### Recall은 되지만 semantic 결과가 없음
+
+기본 상태입니다. `memory_status`에서 `embeddings: 0`이면 FTS/fuzzy만 사용합니다.
+Embedding 설정과 backfill을 완료한 뒤 semantic recall이 활성화됩니다.
+
+### Migration이 non-empty target을 거부함
+
+중복 restore를 막는 정상 동작입니다. 새 Supabase project/database를 사용하거나 target을
+명시적으로 정리한 뒤 재시도합니다. 보존해야 할 target data가 있다면 자동 merge보다
+별도 export와 검토가 필요합니다.
+
+## Verification
+
+전체 local verification은 다음 한 명령으로 실행합니다.
+
+```bash
+npm run verify
+```
+
+개별 명령은 다음과 같습니다.
+
+```bash
+npm run typecheck
+npm test
+npm run test:life-archive
+npm run build
+docker build -t ultimate-hermes:local .
+bash -n scripts/migrate_local_db_to_supabase.sh
+```
+
+Migration rehearsal 절차와 검증 기준은
+`docs/supabase-cloud-deployment-plan.md`에 기록되어 있습니다.
+
+## Repository Layout
+
+| Path | 역할 |
+| --- | --- |
+| `src/mcp/` | 공식 SDK 기반 stdio/Streamable HTTP MCP |
+| `src/remote/` | canonical Life Archive tool/service layer |
+| `src/server/` | authenticated HTTP service |
+| `src/db/migrations/` | legacy + canonical + Supabase hardening schema |
+| `hermes_plugins/life_archive/` | primary Hermes native memory provider |
+| `hermes_skills/life-routine/` | daily memory routing/write policy |
+| `scripts/migrate_local_db_to_supabase.sh` | exact local-to-cloud migration |
+| `scripts/configure_hermes_remote_mcp.py` | secret-safe Hermes MCP setup |
+| `examples/mcp/` | Codex, Claude, Hermes templates |
+| `render.yaml` | Render Blueprint |
+| `Dockerfile` | portable production container |
+
+## References
+
+- [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
+- [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+- [MCP TypeScript SDK server guide](https://ts.sdk.modelcontextprotocol.io/server)
+- [Supabase Postgres connections](https://supabase.com/docs/guides/database/connecting-to-postgres)
+- [Supabase Postgres migration](https://supabase.com/docs/guides/platform/migrating-to-supabase/postgres)
+- [Render Blueprint specification](https://render.com/docs/blueprint-spec)

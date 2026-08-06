@@ -21,7 +21,6 @@
     "src/cli/commands/**/*.ts",
     "src/cli/context.ts",
     "src/cli/output.ts",
-    "src/server/app.ts",
     "src/db/approvals.ts",
     "src/db/audit.ts",
     "src/db/embeddings.ts",

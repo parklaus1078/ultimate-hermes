@@ -1,196 +1,222 @@
-import { stdin as input, stdout as output } from "node:process";
+import { stdin as input } from "node:process";
+import type { Request, Response } from "express";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { z } from "zod";
 import { callRemoteTool } from "../remote/tools.js";
 
-type JsonRpcRequest = {
-  jsonrpc?: "2.0";
-  id?: string | number | null;
-  method?: string;
-  params?: Record<string, unknown>;
+const readOnlyAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
 };
 
-type JsonRpcResponse = {
-  jsonrpc: "2.0";
-  id: string | number | null;
-  result?: unknown;
-  error?: { code: number; message: string };
+const appendOnlyAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false
 };
 
-const protocolVersion = "2024-11-05";
+const filters = {
+  type: z.string().optional().describe("Optional event type filter."),
+  sensitivity: z.string().optional().describe("Optional sensitivity filter."),
+  project: z.string().optional().describe("Optional project/workstream filter."),
+  sessionId: z.string().optional().describe("Optional calling-agent session identifier.")
+};
 
-const toolDefinitions = [
-  {
-    name: "recent_events",
-    description: "List recent Life Archive events from Ultimate Hermes/Postgres.",
-    inputSchema: {
-      type: "object",
-      properties: { limit: { type: "number", description: "Maximum events to return, default 25." } }
-    }
-  },
-  {
-    name: "recall_events",
-    description: "Search Life Archive/Postgres for durable memories, decisions, incidents, and project history.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string" },
-        limit: { type: "number", description: "Maximum matches to return, default 10." }
-      },
-      required: ["query"]
-    }
-  },
-  {
-    name: "timeline",
-    description: "Build a chronological Life Archive timeline for a topic/project.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        topic: { type: "string" },
-        limit: { type: "number", description: "Maximum events to return, default 100." }
-      },
-      required: ["topic"]
-    }
-  },
-  {
-    name: "context_pack",
-    description: "Generate an agent-readable Markdown context pack from shared Ultimate Hermes data.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string" },
-        limit: { type: "number", description: "Maximum recalled records, default 8." }
-      },
-      required: ["query"]
-    }
-  },
-  {
-    name: "capture_event",
-    description: "Write a new durable Life Archive event. Use only when the user/current policy explicitly allows writes.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        type: { type: "string" },
-        sensitivity: { type: "string" },
-        title: { type: "string" },
-        summary: { type: "string" },
-        body: { type: "string" },
-        confidence: { type: "string" },
-        occurredAt: { type: "string" },
-        createdByProfile: { type: "string" },
-        metadata: { type: "object" }
-      },
-      required: ["type", "title"]
-    }
-  }
-];
-
-function success(id: JsonRpcRequest["id"], result: unknown): JsonRpcResponse {
-  return { jsonrpc: "2.0", id: id ?? null, result };
-}
-
-function failure(id: JsonRpcRequest["id"], code: number, message: string): JsonRpcResponse {
-  return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
-}
+export const mcpToolNames = [
+  "recent_events",
+  "recall_events",
+  "timeline",
+  "context_pack",
+  "project_status",
+  "memory_status",
+  "capture_event",
+  "link_source"
+] as const;
 
 function mcpContent(result: unknown) {
-  if (typeof result === "string") return [{ type: "text", text: result }];
-  return [{ type: "text", text: JSON.stringify(result, null, 2) }];
+  if (typeof result === "string") return [{ type: "text" as const, text: result }];
+  return [{ type: "text" as const, text: JSON.stringify(result, null, 2) }];
 }
 
-export async function handleMcpRequest(request: JsonRpcRequest): Promise<JsonRpcResponse | null> {
-  if (request.id === undefined && request.method?.startsWith("notifications/")) return null;
-
-  switch (request.method) {
-    case "initialize":
-      return success(request.id, {
-        protocolVersion,
-        capabilities: { tools: {} },
-        serverInfo: { name: "ultimate-hermes", version: "0.1.0" }
-      });
-    case "ping":
-      return success(request.id, {});
-    case "tools/list":
-      return success(request.id, { tools: toolDefinitions });
-    case "tools/call": {
-      const params = request.params ?? {};
-      const name = params.name;
-      if (typeof name !== "string") return failure(request.id, -32602, "tools/call requires params.name");
-      const result = await callRemoteTool(name, params.arguments ?? {});
-      return success(request.id, { content: mcpContent(result), isError: false });
-    }
-    default:
-      return failure(request.id, -32601, `Unknown MCP method: ${request.method ?? "<missing>"}`);
+async function invoke(name: string, args: unknown) {
+  try {
+    const result = await callRemoteTool(name, args);
+    return {
+      content: mcpContent(result),
+      ...(typeof result === "object" && result !== null ? { structuredContent: result } : {})
+    };
+  } catch (error) {
+    return {
+      content: [{ type: "text" as const, text: error instanceof Error ? error.message : "Ultimate Hermes tool failed." }],
+      isError: true
+    };
   }
 }
 
-function encodeMessage(message: JsonRpcResponse): string {
-  const json = JSON.stringify(message);
-  return `Content-Length: ${Buffer.byteLength(json, "utf8")}\r\n\r\n${json}`;
+export function createMcpServer(): McpServer {
+  const server = new McpServer({ name: "ultimate-hermes", version: "0.2.0" });
+
+  server.registerTool(
+    "recent_events",
+    {
+      description: "List recent durable Life Archive events from the shared Supabase/Postgres memory.",
+      inputSchema: { limit: z.number().int().positive().max(100).optional().describe("Maximum events, default 25.") },
+      annotations: readOnlyAnnotations
+    },
+    async (args) => invoke("recent_events", args)
+  );
+
+  server.registerTool(
+    "recall_events",
+    {
+      description: "Search durable memories, decisions, incidents, documents, and project history using FTS, fuzzy matching, and optional pgvector recall.",
+      inputSchema: {
+        query: z.string().min(1).max(1_000),
+        limit: z.number().int().positive().max(50).optional().describe("Maximum matches, default 10."),
+        ...filters
+      },
+      annotations: readOnlyAnnotations
+    },
+    async (args) => invoke("recall_events", args)
+  );
+
+  server.registerTool(
+    "timeline",
+    {
+      description: "Build a chronological Life Archive timeline for a topic, project, incident, or dispute.",
+      inputSchema: {
+        topic: z.string().min(1).max(1_000),
+        limit: z.number().int().positive().max(250).optional().describe("Maximum events, default 100."),
+        ...filters
+      },
+      annotations: readOnlyAnnotations
+    },
+    async (args) => invoke("timeline", args)
+  );
+
+  server.registerTool(
+    "context_pack",
+    {
+      description: "Generate an agent-readable Markdown context pack from the shared Ultimate Hermes memory.",
+      inputSchema: {
+        query: z.string().min(1).max(1_000),
+        limit: z.number().int().positive().max(20).optional().describe("Maximum recalled records, default 8."),
+        ...filters
+      },
+      annotations: readOnlyAnnotations
+    },
+    async (args) => invoke("context_pack", args)
+  );
+
+  server.registerTool(
+    "project_status",
+    {
+      description: "Summarize a project's durable history, event types, recent records, and possible blockers.",
+      inputSchema: {
+        project: z.string().min(1).max(500),
+        limit: z.number().int().positive().max(100).optional().describe("Maximum recalled records, default 20.")
+      },
+      annotations: readOnlyAnnotations
+    },
+    async (args) => invoke("project_status", args)
+  );
+
+  server.registerTool(
+    "memory_status",
+    {
+      description: "Check canonical memory table counts and the pgvector extension version.",
+      annotations: readOnlyAnnotations
+    },
+    async () => invoke("memory_status", {})
+  );
+
+  server.registerTool(
+    "capture_event",
+    {
+      description: "Append a durable Life Archive event. Never include passwords, API tokens, or private keys.",
+      inputSchema: {
+        type: z.enum(["project", "ticket", "document", "decision", "incident", "legal", "career", "purchase", "research", "communication", "system", "source", "project_update", "event"]).default("event"),
+        sensitivity: z.enum(["public", "personal", "confidential", "legal_sensitive"]).default("personal"),
+        title: z.string().min(1).max(500),
+        summary: z.string().max(4_000).optional(),
+        body: z.string().max(20_000).optional(),
+        confidence: z.enum(["human_confirmed", "imported", "agent_inferred"]).default("agent_inferred"),
+        occurredAt: z.string().datetime().optional(),
+        createdByProfile: z.string().max(200).optional(),
+        sessionId: z.string().max(500).optional(),
+        platform: z.string().max(100).optional(),
+        sourceKind: z.string().max(100).optional(),
+        project: z.string().max(500).optional(),
+        metadata: z.record(z.unknown()).optional()
+      },
+      annotations: appendOnlyAnnotations
+    },
+    async (args) => invoke("capture_event", args)
+  );
+
+  server.registerTool(
+    "link_source",
+    {
+      description: "Append a source or evidence reference to an existing Life Archive event.",
+      inputSchema: {
+        event_id: z.string().min(1),
+        kind: z.string().min(1).max(100),
+        source_uri: z.string().min(1).max(4_000),
+        external_id: z.string().max(1_000).optional(),
+        sha256: z.string().max(128).optional(),
+        metadata: z.record(z.unknown()).optional()
+      },
+      annotations: appendOnlyAnnotations
+    },
+    async (args) => invoke("link_source", args)
+  );
+
+  return server;
 }
 
-function headerLength(buffer: Buffer): { headerEnd: number; separatorLength: number } | null {
-  const crlf = buffer.indexOf("\r\n\r\n");
-  if (crlf >= 0) return { headerEnd: crlf, separatorLength: 4 };
-  const lf = buffer.indexOf("\n\n");
-  if (lf >= 0) return { headerEnd: lf, separatorLength: 2 };
-  return null;
-}
+export async function handleMcpHttpRequest(req: Request, res: Response): Promise<void> {
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true
+  });
 
-function contentLengthFromHeader(header: string): number {
-  const match = header.match(/(?:^|\r?\n)Content-Length:\s*(\d+)/i);
-  if (!match) throw new Error("Missing Content-Length header");
-  return Number.parseInt(match[1]!, 10);
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    await transport.close();
+    await server.close();
+  };
+  res.on("close", () => void close());
+
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32603, message: "Internal MCP server error." }
+      });
+    }
+    throw error;
+  }
 }
 
 export async function runStdioMcpServer(): Promise<void> {
-  let buffer = Buffer.alloc(0);
-
-  input.on("data", (chunk: Buffer) => {
-    buffer = Buffer.concat([buffer, chunk]);
-
-    while (true) {
-      const header = headerLength(buffer);
-      if (!header) return;
-
-      let length: number;
-      try {
-        length = contentLengthFromHeader(buffer.subarray(0, header.headerEnd).toString("ascii"));
-      } catch (error) {
-        output.write(encodeMessage(failure(null, -32600, error instanceof Error ? error.message : String(error))));
-        buffer = Buffer.alloc(0);
-        return;
-      }
-
-      const bodyStart = header.headerEnd + header.separatorLength;
-      const bodyEnd = bodyStart + length;
-      if (buffer.length < bodyEnd) return;
-
-      const body = buffer.subarray(bodyStart, bodyEnd).toString("utf8");
-      buffer = buffer.subarray(bodyEnd);
-
-      void handleBody(body);
-    }
-  });
-
-  await new Promise<void>((resolve) => input.on("end", resolve));
-}
-
-async function handleBody(body: string): Promise<void> {
-  let request: JsonRpcRequest;
-  try {
-    request = JSON.parse(body) as JsonRpcRequest;
-  } catch (error) {
-    output.write(encodeMessage(failure(null, -32700, error instanceof Error ? error.message : String(error))));
-    return;
-  }
-
-  try {
-    const response = await handleMcpRequest(request);
-    if (response) output.write(encodeMessage(response));
-  } catch (error) {
-    output.write(encodeMessage(failure(request.id, -32000, error instanceof Error ? error.message : String(error))));
-  }
+  const server = createMcpServer();
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   await runStdioMcpServer();
+  input.resume();
 }

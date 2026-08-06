@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ultimate-hermes": {
+      "type": "http",
+      "url": "${ULTIMATE_HERMES_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${ULTIMATE_HERMES_API_TOKEN}"
+      }
+    }
+  }
+}
