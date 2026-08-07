@@ -19,6 +19,7 @@ COPY --chown=node:node package.json package-lock.json* ./
 RUN npm prune --omit=dev
 COPY --chown=node:node --from=build /app/dist ./dist
 COPY --chown=node:node --from=build /app/src/db/migrations ./src/db/migrations
+COPY --chown=node:node certs/prod-ca-2021.crt ./certs/prod-ca-2021.crt
 USER node
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
