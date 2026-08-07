@@ -18,7 +18,7 @@ services:
       - key: HERMES_API_TOKEN
         sync: false
       - key: HERMES_ACCEPT_LEGACY_API_TOKEN
-        value: "true"
+        sync: false
       - key: HERMES_SECRET_STORE
         value: env
       - key: HERMES_ALLOW_REMOTE_WRITES
