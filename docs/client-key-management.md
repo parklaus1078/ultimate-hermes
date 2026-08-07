@@ -47,6 +47,9 @@ npm run clients -- list --auth-agent codex
 
 `--auth-agent codex`는 `~/.codex/config.toml`의 Ultimate Hermes key를 읽되 출력하지
 않습니다. Claude는 `--auth-agent claude`, Hermes는 `--auth-agent hermes`를 사용합니다.
+`--auth-agent`를 명시하면 shell에 남아 있는 일반 `MCP_ULTIMATE_HERMES_API_KEY`보다
+선택한 Agent 설정의 key를 우선합니다. 일회성 명시적 관리자 override가 필요할 때만
+`ULTIMATE_HERMES_ADMIN_TOKEN`을 사용합니다.
 
 ## 일반 client 추가
 

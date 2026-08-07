@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -40,6 +42,57 @@ describe("MCP client management CLI", () => {
       expect(stderr).not.toContain("Unexpected token");
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it("honors an explicit auth-agent instead of an ambient shared or manager token", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "ultimate-hermes-client-auth-"));
+    await mkdir(path.join(home, ".codex"));
+    await writeFile(path.join(home, ".codex", "config.toml"), [
+      "[mcp_servers.other]",
+      'url = "https://other.example/mcp"',
+      "",
+      "[mcp_servers.ultimate-hermes]",
+      'url = "https://hermes.example/mcp"',
+      'http_headers = { Authorization = "Bearer selected-codex-token" }',
+      "",
+      "[desktop]",
+      'conversationDetailMode = "STEPS_COMMANDS"',
+      ""
+    ].join("\n"));
+
+    let authorization = "";
+    const server = createServer((req, res) => {
+      authorization = req.headers.authorization || "";
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"clients":[]}');
+    });
+    server.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const { port } = server.address() as AddressInfo;
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: home,
+      MCP_ULTIMATE_HERMES_API_KEY: "ambient-manager-token",
+      ULTIMATE_HERMES_API_TOKEN: "ambient-legacy-token"
+    };
+    delete env.ULTIMATE_HERMES_ADMIN_TOKEN;
+    const child = spawn(process.execPath, [
+      path.resolve("scripts/manage_mcp_clients.mjs"),
+      "list",
+      "--server", `http://127.0.0.1:${port}`,
+      "--auth-agent", "codex"
+    ], { env });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+    const exitCode = await new Promise<number | null>((resolve) => child.once("close", resolve));
+
+    try {
+      expect(exitCode, stderr).toBe(0);
+      expect(authorization).toBe("Bearer selected-codex-token");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await rm(home, { recursive: true, force: true });
     }
   });
 });
