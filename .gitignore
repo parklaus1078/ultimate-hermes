@@ -10,3 +10,5 @@ configs/
 migration-reports/
 __pycache__/
 *.py[cod]
+.gstack/
+.omx/

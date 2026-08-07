@@ -95,14 +95,15 @@ merge한 뒤 진행합니다. Render Deploy button은 GitHub에 있는 코드를
 1. Supabase에서 새 project를 생성합니다.
 2. 가능하면 Render service와 가까운 region을 선택합니다. 기본 Blueprint region은
    Singapore입니다.
-3. Supabase dashboard의 **Connect**에서 Postgres connection string을 복사합니다.
-4. persistent container에는 **Session pooler**의 port `5432` URL을 권장합니다.
+3. Supabase dashboard의 **Connect**에서 migration용 관리자 connection string을 복사합니다.
+4. persistent container에는 별도 `hermes_runtime` 역할의 **Session pooler** port `5432`
+   URL을 사용합니다.
 5. URL 끝에 `sslmode=require`가 없다면 추가합니다.
 
 형식은 대략 다음과 같습니다. 예시를 그대로 사용하면 안 됩니다.
 
 ```text
-postgresql://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require
+postgresql://hermes_runtime.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require
 ```
 
 Dashboard가 출력한 URL을 그대로 사용하는 편이 안전합니다. 비밀번호의 특수문자를
@@ -111,17 +112,19 @@ Dashboard가 출력한 URL을 그대로 사용하는 편이 안전합니다. 비
 현재 terminal session에 URL을 노출 없이 입력합니다.
 
 ```bash
-printf 'Supabase session-pooler URL: '
+printf 'Supabase runtime session-pooler URL: '
 IFS= read -r -s SUPABASE_DATABASE_URL
 printf '\n'
 export SUPABASE_DATABASE_URL
 
-# 별도 direct URL이 필요하지 않으면 같은 session-pooler URL을 사용합니다.
-export SUPABASE_MIGRATION_DATABASE_URL="$SUPABASE_DATABASE_URL"
+printf 'Supabase migration/admin URL: '
+IFS= read -r -s SUPABASE_MIGRATION_DATABASE_URL
+printf '\n'
+export SUPABASE_MIGRATION_DATABASE_URL
 ```
 
-Supabase REST/Data API key는 이 서비스에 필요하지 않습니다. Postgres URL은 Render와
-신뢰된 primary Hermes에만 저장합니다.
+Supabase REST/Data API key는 이 서비스에 필요하지 않습니다. 관리자 URL은 격리된
+migration runner에만 두고, Render에는 `hermes_runtime` URL만 저장합니다.
 
 ### 3. Freeze Writes And Inspect Migration
 
@@ -147,7 +150,7 @@ scripts/migrate_local_db_to_supabase.sh
 script가 수행하는 작업은 다음과 같습니다.
 
 1. 로컬 Docker Postgres의 모든 canonical/legacy application table 수를 기록합니다.
-2. Supabase에 `0001`부터 `0003`까지 schema migration을 적용합니다.
+2. Supabase에 모든 schema migration을 적용합니다.
 3. 대상에 기존 application row가 있으면 기본적으로 중단합니다.
 4. mode `700` 임시 directory에 private custom-format dump를 만듭니다.
 5. `pg_restore --single-transaction`으로 data를 복원합니다.
@@ -191,7 +194,7 @@ Render가 묻는 두 secret을 입력합니다.
 
 | Render variable | 값 |
 | --- | --- |
-| `HERMES_DATABASE_URL` | Supabase session-pooler URL |
+| `HERMES_RUNTIME_DATABASE_URL` | `hermes_runtime` Supabase session-pooler URL |
 | `HERMES_API_TOKEN` | 위에서 생성한 64자리 hex token |
 
 Blueprint의 기본 동작은 다음과 같습니다.
@@ -216,13 +219,13 @@ AWS ECS/Fargate, Railway, Fly.io에도 배포할 수 있습니다. 필요한 run
 ```text
 PORT=<platform assigned port>
 NODE_ENV=production
-HERMES_DATABASE_URL=<Supabase session-pooler URL>
+HERMES_RUNTIME_DATABASE_URL=<hermes_runtime Supabase session-pooler URL>
 HERMES_API_TOKEN=<random secret>
 ```
 
-Netlify Functions는 이 버전의 기본 target이 아닙니다. persistent Express process,
-Postgres pool, startup migration을 그대로 사용할 수 있는 container platform이 더
-단순합니다.
+Netlify Functions는 이 버전의 기본 target이 아닙니다. persistent Express process와
+Postgres pool을 사용할 수 있는 container platform이 더 단순합니다. Schema migration은
+runtime web process가 아니라 별도의 `npm run db:migrate` 작업으로 실행합니다.
 
 ### 7. Verify Deployment
 
@@ -566,10 +569,12 @@ encrypted `pg_dump`를 만들고 DB password와 다른 위치에 보관합니다
 
 ### `/api/v1/ready`가 실패함
 
-- `HERMES_DATABASE_URL`이 session-pooler port `5432`인지 확인합니다.
+- `HERMES_RUNTIME_DATABASE_URL`이 session-pooler port `5432`인지 확인합니다.
 - URL에 `sslmode=require`가 있는지 확인합니다.
 - Supabase password와 project reference를 다시 확인합니다.
-- Render log에서 startup migration 오류를 확인합니다.
+- `npm run db:migrate`로 `0005_runtime_role_hardening.sql`까지 적용했는지 확인합니다.
+- Render의 `HERMES_RUNTIME_DATABASE_URL`에는 `hermes_runtime` URL만 설정하고, 검증 후
+  기존 관리자 `HERMES_DATABASE_URL`을 제거했는지 확인합니다.
 
 ### MCP가 `401`을 반환함
 
@@ -638,6 +643,7 @@ Migration rehearsal 절차와 검증 기준은
 | `scripts/migrate_local_db_to_supabase.sh` | exact local-to-cloud migration |
 | `scripts/configure_hermes_remote_mcp.py` | secret-safe Hermes MCP setup |
 | `examples/mcp/` | Codex, Claude, Hermes templates |
+| `docs/ultimate-hermes-security-hardening-manual.html` | Render/Supabase/MCP 보안 강화 실행 매뉴얼 |
 | `render.yaml` | Render Blueprint |
 | `Dockerfile` | portable production container |
 
