@@ -170,7 +170,7 @@ Migration verified. Exact row counts and content checksums match.
 `--allow-nonempty`는 duplicate key와 merge 결과를 직접 검토한 경우에만 사용합니다.
 일반적인 재시도는 빈 Supabase project/database를 준비하는 편이 안전합니다.
 
-### 5. Generate MCP API Token
+### 5. Generate Bootstrap Admin Token
 
 ```bash
 export HERMES_API_TOKEN="$(openssl rand -hex 32)"
@@ -183,8 +183,9 @@ export HERMES_API_TOKEN="$(openssl rand -hex 32)"
 printf '%s' "$HERMES_API_TOKEN" | pbcopy
 ```
 
-Server에서는 이름이 `HERMES_API_TOKEN`이고, client에서는 같은 값을
-`ULTIMATE_HERMES_API_TOKEN`으로 사용합니다.
+이 값은 최초 client key를 발급하는 전환용 관리자 token입니다. 모든 Agent가 이 값을
+공유하지 않습니다. 배포 후 각 `기기 × Agent` 조합에 별도 key를 발급하고,
+전환이 끝나면 `HERMES_ACCEPT_LEGACY_API_TOKEN=false`로 차단합니다.
 
 ### 6. Deploy To Render
 
@@ -196,7 +197,7 @@ Render가 묻는 두 secret을 입력합니다.
 | Render variable | 값 |
 | --- | --- |
 | `HERMES_RUNTIME_DATABASE_URL` | `hermes_runtime` Supabase session-pooler URL |
-| `HERMES_API_TOKEN` | 위에서 생성한 64자리 hex token |
+| `HERMES_API_TOKEN` | 최초 client 등록용 64자리 bootstrap token |
 
 Blueprint의 기본 동작은 다음과 같습니다.
 
@@ -221,7 +222,8 @@ AWS ECS/Fargate, Railway, Fly.io에도 배포할 수 있습니다. 필요한 run
 PORT=<platform assigned port>
 NODE_ENV=production
 HERMES_RUNTIME_DATABASE_URL=<hermes_runtime Supabase session-pooler URL>
-HERMES_API_TOKEN=<random secret>
+HERMES_API_TOKEN=<bootstrap admin secret>
+HERMES_ACCEPT_LEGACY_API_TOKEN=true
 ```
 
 Netlify Functions는 이 버전의 기본 target이 아닙니다. persistent Express process와
@@ -259,100 +261,99 @@ curl -fsS "$ULTIMATE_HERMES_MCP_URL" \
 
 ## Connect Agents
 
-모든 remote agent는 같은 MCP URL을 사용합니다.
+모든 remote agent는 같은 MCP URL을 사용하지만 API key는 공유하지 않습니다. 식별 단위는
+`기기 × Agent`입니다. 예를 들어 같은 Mac의 Codex와 Claude도 서로 다른 key를 갖습니다.
 
 ```text
 https://YOUR-SERVICE.onrender.com/mcp
 ```
 
-각 장비에서 token을 환경 변수로 준비하되 `.zshrc`, git, Notion, Linear, Slack message에
-평문으로 남기지 않는 것을 권장합니다.
+### 1. 새 client용 원클릭 명령 만들기
+
+관리 PC의 repository에서 bootstrap token 또는 `canManageClients` 권한이 있는 client key를
+환경 변수로 읽은 뒤 명령 하나를 만듭니다. token은 출력되지 않고, 결과에는 10분 뒤
+만료되며 한 번만 쓸 수 있는 등록 코드만 들어갑니다.
 
 ```bash
-printf 'Ultimate Hermes API token: '
-IFS= read -r -s ULTIMATE_HERMES_API_TOKEN
+printf 'Ultimate Hermes admin token: '
+IFS= read -r -s ULTIMATE_HERMES_ADMIN_TOKEN
 printf '\n'
-export ULTIMATE_HERMES_API_TOKEN
-export ULTIMATE_HERMES_MCP_URL="https://YOUR-SERVICE.onrender.com/mcp"
+export ULTIMATE_HERMES_ADMIN_TOKEN
+
+npm run clients -- create --device "kay-macbook" --agent codex
+npm run clients -- create --device "kay-macbook" --agent claude
+npm run clients -- create --device "home-server" --agent hermes
 ```
 
-### Codex
-
-한 번만 실행합니다.
+이미 관리자 client가 설치된 장비에서는 환경 변수를 만들지 않고 해당 Agent 설정에서
+key를 안전하게 읽을 수도 있습니다.
 
 ```bash
+npm run clients -- create --auth-agent codex --device "new-mac" --agent claude
+```
+
+최초 trusted 관리 장비를 등록할 때만 `--admin`을 추가합니다. 일반 Agent key에는 관리
+권한을 주지 않습니다.
+
+```bash
+npm run clients -- create --device "admin-mac" --agent codex --admin
+```
+
+### 2. 대상 기기에서 명령 한 줄 실행
+
+출력된 한 줄을 새 기기 Terminal에서 그대로 실행합니다. 설치기는 대상 기기에서
+256-bit random API key를 만들고 SHA-256 hash만 서버에 등록합니다. 원문 key는 서버의
+client table이나 등록 요청 body에 저장되지 않습니다.
+
+- Codex: `~/.codex/config.toml`의 `ultimate-hermes` HTTP header를 mode `600` 파일에 저장
+- Claude Code: user scope `~/.claude.json`에 HTTP header를 저장
+- Hermes: `~/.hermes/.env`에 key를 mode `600`으로 저장하고 config에는 placeholder만 저장
+- 세 설치기 모두 MCP `initialize`까지 실행해 새 key를 검증
+
+등록 코드는 shell history에 남을 수 있지만 짧게 만료되고 성공 즉시 재사용할 수 없습니다.
+원문 API key는 설치기 출력에 표시되지 않습니다. `curl | runtime` 실행 전 내용을
+검사하려면 installer URL을 먼저 파일로 내려받아 확인한 뒤 실행합니다.
+
+### 3. client와 로그 관리
+
+```bash
+npm run clients -- list --auth-agent codex
+npm run clients -- logs --auth-agent codex --limit 50
+npm run clients -- revoke CLIENT_ID --auth-agent codex
+```
+
+로그에는 client ID/label, 기기명에 연결된 Agent 종류, MCP method/tool, status, latency,
+request ID, best-effort source IP, user-agent가 기록됩니다. Authorization header와 request
+body는 기록하지 않습니다. 응답의 `X-Hermes-Request-Id`로 Render log와 DB audit row를
+연결할 수 있습니다.
+
+### 4. 공유 bootstrap token 차단
+
+관리 key로 `create`, `list`, `logs`, `revoke`가 모두 되는 것을 확인한 뒤 Render에서
+다음 값을 바꾸고 redeploy합니다.
+
+```text
+HERMES_ACCEPT_LEGACY_API_TOKEN=false
+```
+
+이후 기존 `HERMES_API_TOKEN`은 인증에 사용할 수 없습니다. client 하나를 폐기해도 다른
+기기와 Agent는 계속 동작합니다. 전체 절차와 복구 순서는
+`docs/client-key-management.md`에 있습니다.
+
+### 수동 설정 호환 경로
+
+기존 공유 token 방식은 전환 기간에만 사용할 수 있습니다.
+
+```bash
+export ULTIMATE_HERMES_MCP_URL="https://YOUR-SERVICE.onrender.com/mcp"
+export ULTIMATE_HERMES_API_TOKEN="$HERMES_API_TOKEN"
+
 codex mcp add ultimate-hermes \
   --url "$ULTIMATE_HERMES_MCP_URL" \
   --bearer-token-env-var ULTIMATE_HERMES_API_TOKEN
 
 codex mcp list
 ```
-
-동일한 설정을 `~/.codex/config.toml`에 직접 추가할 수도 있습니다.
-
-```toml
-[mcp_servers.ultimate-hermes]
-url = "https://YOUR-SERVICE.onrender.com/mcp"
-bearer_token_env_var = "ULTIMATE_HERMES_API_TOKEN"
-startup_timeout_sec = 30
-tool_timeout_sec = 120
-```
-
-template은 `examples/mcp/codex-config.toml`에 있습니다. Codex를 시작한 process가
-`ULTIMATE_HERMES_API_TOKEN`을 상속해야 합니다.
-
-### Claude Code
-
-Project scope 설정은 token 값 대신 환경 변수 placeholder를 저장합니다.
-
-```bash
-claude mcp add --scope project --transport http \
-  ultimate-hermes "$ULTIMATE_HERMES_MCP_URL" \
-  --header 'Authorization: Bearer ${ULTIMATE_HERMES_API_TOKEN}'
-
-claude mcp list
-```
-
-생성되는 `.mcp.json` 형식은 다음과 같습니다.
-
-```json
-{
-  "mcpServers": {
-    "ultimate-hermes": {
-      "type": "http",
-      "url": "https://YOUR-SERVICE.onrender.com/mcp",
-      "headers": {
-        "Authorization": "Bearer ${ULTIMATE_HERMES_API_TOKEN}"
-      }
-    }
-  }
-}
-```
-
-공용 template은 `examples/mcp/claude-mcp.json`에 있습니다. 여러 project에서 쓰려면
-`--scope user`를 사용합니다.
-
-### Hermes Agent: Remote MCP
-
-다른 기기의 Hermes 또는 DB credential을 갖지 않는 Hermes에는 remote MCP를
-설정합니다.
-
-```bash
-"$HOME/.hermes/hermes-agent/venv/bin/python" \
-  scripts/configure_hermes_remote_mcp.py \
-  --url "$ULTIMATE_HERMES_MCP_URL"
-
-hermes mcp test ultimate-hermes
-hermes mcp configure ultimate-hermes
-hermes gateway restart
-```
-
-설정 script는 다음을 수행합니다.
-
-- token을 hidden prompt로 받습니다.
-- `~/.hermes/.env`에 mode `600`으로 저장합니다.
-- `~/.hermes/config.yaml`에는 `${MCP_ULTIMATE_HERMES_API_KEY}` placeholder만 씁니다.
-- 기존 config를 `~/.hermes/backups/`에 backup합니다.
 
 ### Hermes Agent: Primary Native Provider
 
@@ -502,6 +503,11 @@ configuration helper의 `--allow-http-localhost`를 사용할 수 있습니다.
 | `GET /api/v1/timeline` | Bearer | timeline API |
 | `POST /api/v1/context-pack` | Bearer | Markdown context |
 | `POST /api/v1/events` | Bearer + writes enabled | append-only capture |
+| `POST /api/v1/admin/enrollments` | manager Bearer | 일회용 client 설치 명령 생성 |
+| `POST /api/v1/enrollments/exchange` | one-time enrollment Bearer | locally-generated key hash 등록 |
+| `GET /api/v1/admin/clients` | manager Bearer | client 목록과 last-seen 조회 |
+| `POST /api/v1/admin/clients/:id/revoke` | manager Bearer | client 하나만 즉시 폐기 |
+| `GET /api/v1/admin/request-logs` | manager Bearer | client 식별 요청 로그 조회 |
 
 `GET /mcp`와 `DELETE /mcp`는 stateless server이므로 `405`를 반환합니다. Client는
 Streamable HTTP `POST`를 지원해야 합니다. 구형 HTTP+SSE 전용 client는 업그레이드가
@@ -509,8 +515,11 @@ Streamable HTTP `POST`를 지원해야 합니다. 구형 HTTP+SSE 전용 client�
 
 ## Security Model
 
-- Production startup은 `HERMES_API_TOKEN`이 없으면 실패합니다.
-- MCP와 private API는 constant-time Bearer token 비교를 사용합니다.
+- API key는 `기기 × Agent`별로 분리하며 server에는 256-bit random key의 SHA-256 hash만 저장합니다.
+- indexed key ID로 후보를 찾은 뒤 고정 크기 hash를 constant-time 비교합니다.
+- 등록 token은 5~60분만 유효하고 한 번 사용한 뒤 같은 key/hash의 안전한 retry 외에는 재사용할 수 없습니다.
+- client별 revoke, last-seen, request/tool attribution을 제공합니다.
+- 전환용 `HERMES_API_TOKEN`은 `HERMES_ACCEPT_LEGACY_API_TOKEN=false`로 차단할 수 있습니다.
 - browser `Origin`은 allowlist에 없으면 `403`입니다.
 - Host header도 Render hostname 또는 명시적 allowlist와 일치해야 합니다.
 - Supabase의 `anon`, `authenticated` role은 application table 권한이 revoke됩니다.
@@ -518,8 +527,8 @@ Streamable HTTP `POST`를 지원해야 합니다. 구형 HTTP+SSE 전용 client�
 - Docker image는 non-root `node` user로 실행됩니다.
 - DB credential은 server와 선택적인 primary Hermes에만 둡니다.
 - Readiness/health는 공개지만 memory content를 반환하지 않습니다.
-- 현재 인증은 single-tenant static token입니다. 다중 사용자 서비스로 전환할 때는
-  MCP OAuth 2.1과 per-user authorization을 추가해야 합니다.
+- 현재 인증은 single-tenant per-client key입니다. 외부 사용자에게 서비스할 때는 MCP
+  OAuth 2.1과 per-user authorization을 추가해야 합니다.
 
 Custom domain을 사용하면 다음 중 하나를 Render에 설정합니다.
 
@@ -541,12 +550,12 @@ HERMES_ALLOWED_ORIGINS=https://trusted-client.example.com
 
 ## Operations And Rollback
 
-### Rotate MCP Token
+### Rotate Or Revoke A Client Key
 
-1. 새 `openssl rand -hex 32` token을 생성합니다.
-2. Render의 `HERMES_API_TOKEN`을 바꾸고 redeploy합니다.
-3. 각 client의 `ULTIMATE_HERMES_API_TOKEN`을 바꿉니다.
-4. Hermes remote helper를 다시 실행하고 gateway를 restart합니다.
+1. 해당 `CLIENT_ID`를 `npm run clients -- revoke CLIENT_ID --auth-agent codex`로 폐기합니다.
+2. 같은 기기·Agent 이름으로 새 enrollment command를 만듭니다.
+3. 대상 기기에서 command를 실행합니다.
+4. `list`의 새 last-seen과 `logs`의 MCP initialize를 확인합니다.
 
 ### Roll Back To Local Database
 
@@ -573,14 +582,15 @@ encrypted `pg_dump`를 만들고 DB password와 다른 위치에 보관합니다
 - `HERMES_RUNTIME_DATABASE_URL`이 session-pooler port `5432`인지 확인합니다.
 - URL에 `sslmode=verify-full&sslrootcert=/app/certs/prod-ca-2021.crt`가 있는지 확인합니다.
 - Supabase password와 project reference를 다시 확인합니다.
-- `npm run db:migrate`로 `0005_runtime_role_hardening.sql`까지 적용했는지 확인합니다.
+- `npm run db:migrate`로 `0007_mcp_client_foreign_key_indexes.sql`까지 적용했는지 확인합니다.
 - Render의 `HERMES_RUNTIME_DATABASE_URL`에는 `hermes_runtime` URL만 설정하고, 검증 후
   기존 관리자 `HERMES_DATABASE_URL`을 제거했는지 확인합니다.
 
 ### MCP가 `401`을 반환함
 
-Server의 `HERMES_API_TOKEN`과 client의 `ULTIMATE_HERMES_API_TOKEN` 값이 달라졌습니다.
-token을 URL query나 config에 직접 넣지 말고 environment/header로 전달합니다.
+`npm run clients -- list`에서 해당 client가 `active`인지 확인합니다. 폐기되었거나 잘못된
+key이면 새 enrollment를 발급해 설치기를 다시 실행합니다. 전환 중 공유 token을 쓰는
+client라면 `HERMES_ACCEPT_LEGACY_API_TOKEN`도 확인합니다.
 
 ### MCP가 `403 Host is not allowed`를 반환함
 
@@ -643,7 +653,10 @@ Migration rehearsal 절차와 검증 기준은
 | `hermes_skills/life-routine/` | daily memory routing/write policy |
 | `scripts/migrate_local_db_to_supabase.sh` | exact local-to-cloud migration |
 | `scripts/configure_hermes_remote_mcp.py` | secret-safe Hermes MCP setup |
+| `scripts/install_mcp_client.{mjs,py}` | local key generation + one-command client enrollment |
+| `scripts/manage_mcp_clients.mjs` | enrollment/list/log/revoke operator CLI |
 | `examples/mcp/` | Codex, Claude, Hermes templates |
+| `docs/client-key-management.md` | per-device/Agent key 운영과 배포 runbook |
 | `docs/ultimate-hermes-security-hardening-manual.html` | Render/Supabase/MCP 보안 강화 실행 매뉴얼 |
 | `render.yaml` | Render Blueprint |
 | `Dockerfile` | portable production container |

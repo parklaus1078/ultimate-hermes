@@ -24,6 +24,8 @@ describe.sequential("runtime database hardening", () => {
     const dockerfile = await readFile(new URL("../../Dockerfile", import.meta.url), "utf8");
     expect(certificate).toContain("-----BEGIN CERTIFICATE-----");
     expect(dockerfile).toContain("certs/prod-ca-2021.crt");
+    expect(dockerfile).toContain("scripts/install_mcp_client.mjs");
+    expect(dockerfile).toContain("scripts/install_mcp_client.py");
   });
 
   it("starts the web process with a read-only schema check instead of migrations", async () => {
@@ -33,17 +35,24 @@ describe.sequential("runtime database hardening", () => {
   });
 
   it("grants only the operations used by the remote MCP service", async () => {
-    const migration = await readFile(
-      new URL(`../../src/db/migrations/${requiredSchemaMigration}`, import.meta.url),
+    const runtimeMigration = await readFile(
+      new URL("../../src/db/migrations/0005_runtime_role_hardening.sql", import.meta.url),
+      "utf8"
+    );
+    const clientMigration = await readFile(
+      new URL("../../src/db/migrations/0006_mcp_client_auth.sql", import.meta.url),
       "utf8"
     );
 
-    expect(migration).toContain("nobypassrls");
-    expect(migration).toContain("grant insert on table");
-    expect(migration).toContain("public.life_events");
-    expect(migration).toContain("public.life_recall_hits");
-    expect(migration).toContain("grant update, delete on table public.life_embeddings");
-    expect(migration).not.toMatch(/grant\s+all/i);
-    expect(migration).not.toMatch(/grant\s+(create|truncate)/i);
+    expect(runtimeMigration).toContain("nobypassrls");
+    expect(runtimeMigration).toContain("grant insert on table");
+    expect(runtimeMigration).toContain("public.life_events");
+    expect(runtimeMigration).toContain("public.life_recall_hits");
+    expect(runtimeMigration).toContain("grant update, delete on table public.life_embeddings");
+    expect(clientMigration).toContain("enable row level security");
+    expect(clientMigration).toContain("grant update (status, revoked_at, last_seen_at, updated_at)");
+    expect(clientMigration).toContain("revoke all privileges on table");
+    expect(`${runtimeMigration}\n${clientMigration}`).not.toMatch(/grant\s+all/i);
+    expect(`${runtimeMigration}\n${clientMigration}`).not.toMatch(/grant\s+(create|truncate)/i);
   });
 });

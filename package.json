@@ -1,6 +1,6 @@
 {
   "name": "ultimate-hermes",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Shared Supabase memory and remote MCP service for Hermes, Codex, and Claude",
@@ -23,6 +23,7 @@
     "db:migrate": "npm run build && node dist/src/cli/index.js migrate",
     "db:migrate:supabase": "scripts/migrate_local_db_to_supabase.sh",
     "setup:check": "npm run build && node dist/src/cli/index.js setup check",
+    "clients": "node scripts/manage_mcp_clients.mjs",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f hermes"
