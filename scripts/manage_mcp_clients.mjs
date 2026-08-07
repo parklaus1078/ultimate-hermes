@@ -26,12 +26,24 @@ function readOptional(filePath) {
   }
 }
 
+function tomlSection(config, header) {
+  const lines = config.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === header);
+  if (start < 0) return "";
+  let end = start + 1;
+  while (end < lines.length && !/^\s*\[\[?.+\]\]?\s*$/.test(lines[end])) end += 1;
+  return lines.slice(start + 1, end).join("\n");
+}
+
 function discoverAgentToken(agent) {
   const home = process.env.HOME || os.homedir();
   if (agent === "codex") {
     const config = readOptional(path.join(home, ".codex", "config.toml"));
-    const section = config.match(/\[mcp_servers\.ultimate-hermes\]([\s\S]*?)(?=\n\s*\[\[?.+\]\]?\s*$|$)/m)?.[1] || "";
-    return section.match(/Authorization\s*=\s*"Bearer\s+([^"\r\n]+)"/)?.[1] || null;
+    const section = tomlSection(config, "[mcp_servers.ultimate-hermes]");
+    const headerToken = section.match(/Authorization\s*=\s*"Bearer\s+([^"\r\n]+)"/)?.[1];
+    if (headerToken) return headerToken;
+    const envName = section.match(/bearer_token_env_var\s*=\s*"([^"\r\n]+)"/)?.[1];
+    return envName ? process.env[envName]?.trim() || null : null;
   }
   if (agent === "claude") {
     const config = JSON.parse(readOptional(path.join(home, ".claude.json")) || "{}");
@@ -92,10 +104,11 @@ async function call(path, token, init = {}) {
 
 async function main() {
   const authAgent = option("auth-agent");
+  const selectedAgentToken = authAgent ? discoverAgentToken(authAgent) : null;
   const token = process.env.ULTIMATE_HERMES_ADMIN_TOKEN ||
+    selectedAgentToken ||
     process.env.MCP_ULTIMATE_HERMES_API_KEY ||
-    process.env.ULTIMATE_HERMES_API_TOKEN ||
-    discoverAgentToken(authAgent);
+    process.env.ULTIMATE_HERMES_API_TOKEN;
   if (!token) {
     throw new Error("Set ULTIMATE_HERMES_ADMIN_TOKEN or pass --auth-agent codex|claude|hermes for a manager client.");
   }
