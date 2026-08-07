@@ -526,6 +526,9 @@ Streamable HTTP `POST`를 지원해야 합니다. 구형 HTTP+SSE 전용 client�
   `HERMES_ACCEPT_LEGACY_API_TOKEN=true`로 명시적으로 허용합니다.
 - browser `Origin`은 allowlist에 없으면 `403`입니다.
 - Host header도 Render hostname 또는 명시적 allowlist와 일치해야 합니다.
+- 잘못된 인증을 source IP별로 집계하고 기본 10회/5분 실패 시 15분 동안 `429`로
+  차단합니다. 현재 단일 Render instance에서는 bounded memory store를 사용하며,
+  다중 instance 전환 시 중앙 TTL store가 필요합니다.
 - Supabase의 `anon`, `authenticated` role은 application table 권한이 revoke됩니다.
 - canonical/legacy table과 migration metadata table에 RLS가 활성화됩니다.
 - Docker image는 non-root `node` user로 실행됩니다.
@@ -533,6 +536,9 @@ Streamable HTTP `POST`를 지원해야 합니다. 구형 HTTP+SSE 전용 client�
 - Readiness/health는 공개지만 memory content를 반환하지 않습니다.
 - 현재 인증은 single-tenant per-client key입니다. 외부 사용자에게 서비스할 때는 MCP
   OAuth 2.1과 per-user authorization을 추가해야 합니다.
+
+인증 실패 차단 설정, 로그, proxy hop 검증, 다중 instance 전환 기준은
+`docs/auth-failure-rate-limiting.md`에 있습니다.
 
 Custom domain을 사용하면 다음 중 하나를 Render에 설정합니다.
 

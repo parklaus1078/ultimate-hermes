@@ -2,7 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import type express from "express";
 import { loadConfig, type AppConfig } from "../config/env.js";
 import { McpClientRepository, type AgentType, type McpClient } from "../db/mcp-clients.js";
+import { AuthFailureRateLimiter } from "./auth-rate-limit.js";
 import { parseClientCredential, safeHashEqual } from "./client-credentials.js";
+import { boundedHeader, requestAddresses } from "./request-metadata.js";
 
 export type AuthenticatedClient = {
   id: string | null;
@@ -97,53 +99,94 @@ export function requireAllowedRemoteOrigin(req: express.Request, res: express.Re
   next();
 }
 
-export async function requireRemoteAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const config = loadConfig();
-  const repository = new McpClientRepository();
+function sendRateLimited(res: express.Response, retryAfterSeconds: number): void {
+  res.setHeader("Retry-After", String(retryAfterSeconds));
+  res.setHeader("Cache-Control", "no-store");
+  res.status(429).json({ ok: false, error: "Too many failed authentication attempts. Retry later." });
+}
 
-  if (!config.apiToken && config.nodeEnv !== "production" && isLoopbackHost(config.host)) {
-    res.locals.hermesClient = {
-      id: null,
-      keyId: "local-development",
-      label: "local-development",
-      deviceName: "localhost",
-      agentType: "local",
-      canManageClients: true,
-      authentication: "local-development"
-    } satisfies AuthenticatedClient;
-    next();
-    return;
-  }
+function logAuthFailure(req: express.Request, event: "mcp_auth_rejected" | "mcp_auth_rate_limited", failures: number): void {
+  console.warn(JSON.stringify({
+    level: "warn",
+    event,
+    method: req.method.slice(0, 16),
+    path: req.path.slice(0, 300),
+    sourceIp: requestAddresses(req).sourceIp ?? "unknown",
+    failures,
+    userAgent: boundedHeader(req, "user-agent", 500)
+  }));
+}
 
-  try {
-    const client = await authenticateToken(
-      bearerToken(req),
-      config,
-      (keyId) => repository.findActiveByKeyId(keyId)
-    );
-    if (!client) {
-      console.warn(JSON.stringify({
-        level: "warn",
-        event: "mcp_auth_rejected",
-        method: req.method.slice(0, 16),
-        path: req.path.slice(0, 300),
-        sourceIp: (req.header("x-forwarded-for")?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown").slice(0, 100),
-        userAgent: req.header("user-agent")?.slice(0, 500) ?? null
-      }));
-      res.setHeader("WWW-Authenticate", "Bearer");
-      res.status(401).json({ ok: false, error: "Missing or invalid bearer token." });
+export function createAuthAttemptGuard(rateLimiter: AuthFailureRateLimiter) {
+  return function requireAuthAttemptAllowed(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const decision = rateLimiter.check(requestAddresses(req).sourceIp);
+    if (!decision.blocked) {
+      next();
       return;
     }
-    res.locals.hermesClient = client;
-    if (client.id) {
-      repository.touch(client.id).catch((error: unknown) => {
-        console.error(JSON.stringify({ level: "error", event: "mcp_client_touch_failed", error: String(error) }));
-      });
-    }
-    next();
-  } catch (error) {
-    next(error);
+    logAuthFailure(req, "mcp_auth_rate_limited", decision.failures);
+    sendRateLimited(res, decision.retryAfterSeconds);
+  };
+}
+
+export function rejectInvalidAuthentication(
+  req: express.Request,
+  res: express.Response,
+  rateLimiter: AuthFailureRateLimiter,
+  message: string
+): void {
+  const decision = rateLimiter.recordFailure(requestAddresses(req).sourceIp);
+  if (decision.blocked) {
+    logAuthFailure(req, "mcp_auth_rate_limited", decision.failures);
+    sendRateLimited(res, decision.retryAfterSeconds);
+    return;
   }
+  logAuthFailure(req, "mcp_auth_rejected", decision.failures);
+  res.setHeader("WWW-Authenticate", "Bearer");
+  res.setHeader("Cache-Control", "no-store");
+  res.status(401).json({ ok: false, error: message });
+}
+
+export function createRemoteAuth(rateLimiter: AuthFailureRateLimiter) {
+  return async function requireRemoteAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const config = loadConfig();
+    const repository = new McpClientRepository();
+
+    if (!config.apiToken && config.nodeEnv !== "production" && isLoopbackHost(config.host)) {
+      res.locals.hermesClient = {
+        id: null,
+        keyId: "local-development",
+        label: "local-development",
+        deviceName: "localhost",
+        agentType: "local",
+        canManageClients: true,
+        authentication: "local-development"
+      } satisfies AuthenticatedClient;
+      next();
+      return;
+    }
+
+    try {
+      const client = await authenticateToken(
+        bearerToken(req),
+        config,
+        (keyId) => repository.findActiveByKeyId(keyId)
+      );
+      if (!client) {
+        rejectInvalidAuthentication(req, res, rateLimiter, "Missing or invalid bearer token.");
+        return;
+      }
+      res.locals.hermesClient = client;
+      if (client.id) {
+        repository.touch(client.id).catch((error: unknown) => {
+          console.error(JSON.stringify({ level: "error", event: "mcp_client_touch_failed", error: String(error) }));
+        });
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export function requireClientManager(_req: express.Request, res: express.Response, next: express.NextFunction) {

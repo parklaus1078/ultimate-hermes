@@ -25,6 +25,18 @@ services:
         value: "true"
       - key: HERMES_ENABLE_LEGACY_ROUTES
         value: "false"
+      - key: HERMES_TRUST_PROXY_HOPS
+        value: "1"
+      - key: HERMES_AUTH_RATE_LIMIT_ENABLED
+        value: "true"
+      - key: HERMES_AUTH_RATE_LIMIT_MAX_FAILURES
+        value: "10"
+      - key: HERMES_AUTH_RATE_LIMIT_WINDOW_MS
+        value: "300000"
+      - key: HERMES_AUTH_RATE_LIMIT_BLOCK_MS
+        value: "900000"
+      - key: HERMES_AUTH_RATE_LIMIT_MAX_ENTRIES
+        value: "5000"
       - key: HERMES_DATABASE_MAX_CONNECTIONS
         value: "5"
       - key: HERMES_DATABASE_CONNECTION_TIMEOUT_MS
