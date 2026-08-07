@@ -24,6 +24,30 @@ describe.sequential("runtime database hardening", () => {
     expect(blueprint).not.toMatch(/HERMES_ACCEPT_LEGACY_API_TOKEN\n\s+value: ["']?true/);
   });
 
+  it("enables bounded authentication failure blocking and pins the Render proxy hop", async () => {
+    delete process.env.HERMES_AUTH_RATE_LIMIT_ENABLED;
+    delete process.env.HERMES_AUTH_RATE_LIMIT_MAX_FAILURES;
+    delete process.env.HERMES_AUTH_RATE_LIMIT_WINDOW_MS;
+    delete process.env.HERMES_AUTH_RATE_LIMIT_BLOCK_MS;
+    delete process.env.HERMES_AUTH_RATE_LIMIT_MAX_ENTRIES;
+    delete process.env.HERMES_TRUST_PROXY_HOPS;
+    expect(loadConfig()).toMatchObject({
+      trustProxyHops: 0,
+      authRateLimitEnabled: true,
+      authRateLimitMaxFailures: 10,
+      authRateLimitWindowMs: 300_000,
+      authRateLimitBlockMs: 900_000,
+      authRateLimitMaxEntries: 5_000
+    });
+
+    const blueprint = await readFile(new URL("../../render.yaml", import.meta.url), "utf8");
+    expect(blueprint).toMatch(/HERMES_TRUST_PROXY_HOPS\n\s+value: ["']1["']/);
+    expect(blueprint).toMatch(/HERMES_AUTH_RATE_LIMIT_ENABLED\n\s+value: ["']true["']/);
+
+    process.env.HERMES_AUTH_RATE_LIMIT_MAX_FAILURES = "1";
+    expect(() => loadConfig()).toThrow(/HERMES_AUTH_RATE_LIMIT_MAX_FAILURES must be between 2 and 1000/);
+  });
+
   it("prefers the isolated runtime DSN during a reversible credential rollout", () => {
     process.env.HERMES_DATABASE_URL = "postgres://migration-owner.example/postgres";
     process.env.HERMES_RUNTIME_DATABASE_URL = "postgres://hermes-runtime.example/postgres";

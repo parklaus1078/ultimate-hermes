@@ -18,6 +18,12 @@ export type AppConfig = {
   publicBaseUrl: string;
   apiToken: string | null;
   acceptLegacyApiToken: boolean;
+  trustProxyHops: number;
+  authRateLimitEnabled: boolean;
+  authRateLimitMaxFailures: number;
+  authRateLimitWindowMs: number;
+  authRateLimitBlockMs: number;
+  authRateLimitMaxEntries: number;
   allowedHosts: string[];
   allowedOrigins: string[];
   allowRemoteWrites: boolean;
@@ -43,6 +49,14 @@ function intEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(raw, 10);
   if (Number.isNaN(parsed)) throw new Error(`Invalid integer env var ${name}: ${raw}`);
   return parsed;
+}
+
+function rangedIntEnv(name: string, fallback: number, min: number, max: number): number {
+  const value = intEnv(name, fallback);
+  if (value < min || value > max) {
+    throw new Error(`Environment variable ${name} must be between ${min} and ${max}.`);
+  }
+  return value;
 }
 
 function strEnv(name: string, fallback?: string): string {
@@ -117,6 +131,12 @@ export function loadConfig(): AppConfig {
     publicBaseUrl: baseUrl,
     apiToken: process.env.HERMES_API_TOKEN?.trim() || null,
     acceptLegacyApiToken: boolEnv("HERMES_ACCEPT_LEGACY_API_TOKEN", false),
+    trustProxyHops: rangedIntEnv("HERMES_TRUST_PROXY_HOPS", 0, 0, 10),
+    authRateLimitEnabled: boolEnv("HERMES_AUTH_RATE_LIMIT_ENABLED", true),
+    authRateLimitMaxFailures: rangedIntEnv("HERMES_AUTH_RATE_LIMIT_MAX_FAILURES", 10, 2, 1_000),
+    authRateLimitWindowMs: rangedIntEnv("HERMES_AUTH_RATE_LIMIT_WINDOW_MS", 300_000, 1_000, 86_400_000),
+    authRateLimitBlockMs: rangedIntEnv("HERMES_AUTH_RATE_LIMIT_BLOCK_MS", 900_000, 1_000, 86_400_000),
+    authRateLimitMaxEntries: rangedIntEnv("HERMES_AUTH_RATE_LIMIT_MAX_ENTRIES", 5_000, 100, 100_000),
     allowedHosts: defaultAllowedHosts(baseUrl, host),
     allowedOrigins: csvEnv("HERMES_ALLOWED_ORIGINS"),
     allowRemoteWrites: boolEnv("HERMES_ALLOW_REMOTE_WRITES", false),

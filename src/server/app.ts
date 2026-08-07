@@ -9,8 +9,10 @@ import { McpClientRepository } from "../db/mcp-clients.js";
 import { handleMcpHttpRequest } from "../mcp/server.js";
 import {
   requireAllowedRemoteOrigin,
+  createAuthAttemptGuard,
   requireClientManager,
-  requireRemoteAuth,
+  createRemoteAuth,
+  rejectInvalidAuthentication,
   requireRemoteWrites,
   type AuthenticatedClient
 } from "../remote/auth.js";
@@ -20,9 +22,10 @@ import {
   parseEnrollmentCredential
 } from "../remote/client-credentials.js";
 import { auditAuthenticatedRequest } from "../remote/request-audit.js";
+import { AuthFailureRateLimiter } from "../remote/auth-rate-limit.js";
 import { captureEvent, contextPack, recallEvents, recentEvents, timeline } from "../remote/tools.js";
 
-const version = "0.3.3";
+const version = "0.4.0";
 
 const enrollmentSchema = z.object({
   deviceName: z.string().trim().min(1).max(100),
@@ -63,9 +66,18 @@ export function createApp() {
   const config = loadConfig();
   const app = express();
   app.disable("x-powered-by");
+  app.set("trust proxy", config.trustProxyHops > 0 ? config.trustProxyHops : false);
   app.use(express.json({ limit: "2mb" }));
 
-  const remoteGuards = [requireAllowedRemoteOrigin, requireRemoteAuth, auditAuthenticatedRequest] as const;
+  const authRateLimiter = new AuthFailureRateLimiter({
+    enabled: config.authRateLimitEnabled,
+    maxFailures: config.authRateLimitMaxFailures,
+    windowMs: config.authRateLimitWindowMs,
+    blockMs: config.authRateLimitBlockMs,
+    maxEntries: config.authRateLimitMaxEntries
+  });
+  const authAttemptGuard = createAuthAttemptGuard(authRateLimiter);
+  const remoteGuards = [requireAllowedRemoteOrigin, authAttemptGuard, createRemoteAuth(authRateLimiter), auditAuthenticatedRequest] as const;
   const adminGuards = [...remoteGuards, requireClientManager] as const;
 
   app.get("/", (_req, res) => {
@@ -177,12 +189,12 @@ export function createApp() {
     }
   });
 
-  app.post("/api/v1/enrollments/exchange", requireAllowedRemoteOrigin, async (req, res, next) => {
+  app.post("/api/v1/enrollments/exchange", requireAllowedRemoteOrigin, authAttemptGuard, async (req, res, next) => {
     try {
       const enrollment = parseEnrollmentCredential(bearerToken(req) ?? "");
       const input = exchangeSchema.parse(req.body);
       if (!enrollment) {
-        res.status(401).json({ ok: false, error: "Invalid or expired enrollment token." });
+        rejectInvalidAuthentication(req, res, authRateLimiter, "Invalid or expired enrollment token.");
         return;
       }
       const client = await new McpClientRepository().exchangeEnrollment({
@@ -192,7 +204,7 @@ export function createApp() {
         keyHash: input.keyHash
       });
       if (!client) {
-        res.status(401).json({ ok: false, error: "Invalid or expired enrollment token." });
+        rejectInvalidAuthentication(req, res, authRateLimiter, "Invalid or expired enrollment token.");
         return;
       }
       res.status(201).json({ ok: true, client });

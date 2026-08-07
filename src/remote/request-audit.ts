@@ -1,24 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { isIP } from "node:net";
 import type express from "express";
 import { McpClientRepository } from "../db/mcp-clients.js";
 import type { AuthenticatedClient } from "./auth.js";
-
-function boundedHeader(req: express.Request, name: string, maxLength: number): string | null {
-  const value = req.header(name)?.trim();
-  return value ? value.slice(0, maxLength) : null;
-}
-
-function clientIp(req: express.Request): { sourceIp: string | null; socketIp: string | null; forwardedFor: string | null } {
-  const forwardedFor = boundedHeader(req, "x-forwarded-for", 500);
-  const forwardedCandidate = forwardedFor?.split(",")[0]?.trim() ?? null;
-  const socketIp = req.socket.remoteAddress?.slice(0, 100) ?? null;
-  return {
-    sourceIp: forwardedCandidate && isIP(forwardedCandidate) ? forwardedCandidate : socketIp,
-    socketIp,
-    forwardedFor
-  };
-}
+import { boundedHeader, requestAddresses } from "./request-metadata.js";
 
 function requestOperation(req: express.Request): string | null {
   if (req.path !== "/mcp" || !req.body || Array.isArray(req.body) || typeof req.body !== "object") return null;
@@ -37,7 +21,7 @@ export function auditAuthenticatedRequest(req: express.Request, res: express.Res
 
   const started = process.hrtime.bigint();
   const requestId = randomUUID();
-  const addresses = clientIp(req);
+  const addresses = requestAddresses(req);
   res.setHeader("X-Hermes-Request-Id", requestId);
 
   res.once("finish", () => {
