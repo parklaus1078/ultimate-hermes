@@ -28,6 +28,13 @@ describe.sequential("runtime database hardening", () => {
     expect(dockerfile).toContain("scripts/install_mcp_client.py");
   });
 
+  it("sends the Streamable HTTP Accept header from both installers", async () => {
+    const nodeInstaller = await readFile(new URL("../../scripts/install_mcp_client.mjs", import.meta.url), "utf8");
+    const pythonInstaller = await readFile(new URL("../../scripts/install_mcp_client.py", import.meta.url), "utf8");
+    expect(nodeInstaller).toContain('Accept: "application/json, text/event-stream"');
+    expect(pythonInstaller).toContain('accept="application/json, text/event-stream"');
+  });
+
   it("starts the web process with a read-only schema check instead of migrations", async () => {
     const serverSource = await readFile(new URL("../../src/server/index.ts", import.meta.url), "utf8");
     expect(serverSource).toContain("await assertSchemaReady()");

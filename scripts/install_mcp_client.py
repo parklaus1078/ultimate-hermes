@@ -33,8 +33,15 @@ def normalize_server(value: str) -> str:
     return server
 
 
-def request(url: str, *, method: str = "GET", token: str | None = None, body: dict | None = None) -> dict:
-    headers = {"Accept": "application/json"}
+def request(
+    url: str,
+    *,
+    method: str = "GET",
+    token: str | None = None,
+    body: dict | None = None,
+    accept: str = "application/json",
+) -> dict:
+    headers = {"Accept": accept}
     data = None
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -134,6 +141,7 @@ def main() -> int:
         f"{server}/mcp",
         method="POST",
         token=api_key,
+        accept="application/json, text/event-stream",
         body={
             "jsonrpc": "2.0",
             "id": 1,

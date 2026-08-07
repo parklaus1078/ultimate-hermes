@@ -91,7 +91,11 @@ async function exchange(server, enrollment, credential) {
 async function verify(server, key, agent) {
   const response = await fetch(`${server}/mcp`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json" },
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream"
+    },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 1,

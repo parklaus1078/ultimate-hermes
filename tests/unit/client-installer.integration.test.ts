@@ -35,6 +35,10 @@ async function runInstaller(agent: "codex" | "claude") {
     if (req.method === "POST" && req.url === "/mcp") {
       mcpAuthorization = req.headers.authorization ?? "";
       await body(req);
+      if (req.headers.accept !== "application/json, text/event-stream") {
+        res.writeHead(406, { "content-type": "application/json" }).end('{"error":"Not Acceptable"}');
+        return;
+      }
       res.writeHead(200, { "content-type": "application/json" }).end('{"jsonrpc":"2.0","id":1,"result":{}}');
       return;
     }
