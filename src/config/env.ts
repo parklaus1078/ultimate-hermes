@@ -17,6 +17,7 @@ export type AppConfig = {
   host: string;
   publicBaseUrl: string;
   apiToken: string | null;
+  acceptLegacyApiToken: boolean;
   allowedHosts: string[];
   allowedOrigins: string[];
   allowRemoteWrites: boolean;
@@ -115,6 +116,7 @@ export function loadConfig(): AppConfig {
     host,
     publicBaseUrl: baseUrl,
     apiToken: process.env.HERMES_API_TOKEN?.trim() || null,
+    acceptLegacyApiToken: boolEnv("HERMES_ACCEPT_LEGACY_API_TOKEN", true),
     allowedHosts: defaultAllowedHosts(baseUrl, host),
     allowedOrigins: csvEnv("HERMES_ALLOWED_ORIGINS"),
     allowRemoteWrites: boolEnv("HERMES_ALLOW_REMOTE_WRITES", false),

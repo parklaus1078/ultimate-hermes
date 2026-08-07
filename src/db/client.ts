@@ -11,7 +11,7 @@ export type Db = pg.Pool;
 
 let pool: pg.Pool | undefined;
 
-export const requiredSchemaMigration = "0005_runtime_role_hardening.sql";
+export const requiredSchemaMigration = "0007_mcp_client_foreign_key_indexes.sql";
 
 export function getDb(): Db {
   if (!pool) {

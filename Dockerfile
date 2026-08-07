@@ -19,6 +19,8 @@ COPY --chown=node:node package.json package-lock.json* ./
 RUN npm prune --omit=dev
 COPY --chown=node:node --from=build /app/dist ./dist
 COPY --chown=node:node --from=build /app/src/db/migrations ./src/db/migrations
+COPY --chown=node:node --from=build /app/scripts/install_mcp_client.mjs ./scripts/install_mcp_client.mjs
+COPY --chown=node:node --from=build /app/scripts/install_mcp_client.py ./scripts/install_mcp_client.py
 COPY --chown=node:node certs/prod-ca-2021.crt ./certs/prod-ca-2021.crt
 USER node
 EXPOSE 8787
