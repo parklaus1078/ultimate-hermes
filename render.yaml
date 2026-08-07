@@ -13,7 +13,7 @@ services:
         value: production
       - key: HERMES_HOST
         value: 0.0.0.0
-      - key: HERMES_DATABASE_URL
+      - key: HERMES_RUNTIME_DATABASE_URL
         sync: false
       - key: HERMES_API_TOKEN
         sync: false

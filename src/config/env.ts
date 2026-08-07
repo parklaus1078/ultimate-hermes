@@ -10,7 +10,6 @@ dotenv.config({
 export type AppConfig = {
   nodeEnv: string;
   databaseUrl: string;
-  migrationDatabaseUrl: string;
   databaseMaxConnections: number;
   databaseConnectionTimeoutMs: number;
   databaseIdleTimeoutMs: number;
@@ -91,7 +90,11 @@ export function loadConfig(): AppConfig {
   const port = intEnv("HERMES_PORT", intEnv("PORT", 8787));
   const host = strEnv("HERMES_HOST", nodeEnv === "production" ? "0.0.0.0" : "127.0.0.1");
   const baseUrl = publicBaseUrl(host, port);
-  const databaseUrl = strEnv("HERMES_DATABASE_URL", "postgres://hermes:hermes@localhost:55432/hermes");
+  const legacyDatabaseUrl = process.env.HERMES_DATABASE_URL?.trim() || undefined;
+  const databaseUrl = strEnv(
+    "HERMES_RUNTIME_DATABASE_URL",
+    legacyDatabaseUrl ?? "postgres://hermes:hermes@localhost:55432/hermes"
+  );
   const hasEmbeddingKey = Boolean(
     process.env.HERMES_EMBEDDING_API_KEY ||
       process.env.OPENAI_API_KEY ||
@@ -105,7 +108,6 @@ export function loadConfig(): AppConfig {
   return {
     nodeEnv,
     databaseUrl,
-    migrationDatabaseUrl: strEnv("HERMES_MIGRATION_DATABASE_URL", databaseUrl),
     databaseMaxConnections: intEnv("HERMES_DATABASE_MAX_CONNECTIONS", 5),
     databaseConnectionTimeoutMs: intEnv("HERMES_DATABASE_CONNECTION_TIMEOUT_MS", 10_000),
     databaseIdleTimeoutMs: intEnv("HERMES_DATABASE_IDLE_TIMEOUT_MS", 30_000),
@@ -147,4 +149,8 @@ export function loadConfig(): AppConfig {
       }
     }
   };
+}
+
+export function loadMigrationDatabaseUrl(): string {
+  return strEnv("HERMES_MIGRATION_DATABASE_URL", loadConfig().databaseUrl);
 }

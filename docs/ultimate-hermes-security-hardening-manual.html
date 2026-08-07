@@ -1,0 +1,2645 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Ultimate Hermes MCP 보안 강화 실행 매뉴얼</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #e9edf0;
+      --paper: #fffdf8;
+      --paper-2: #f6f3ec;
+      --ink: #172027;
+      --muted: #5d6870;
+      --line: #d4d9dc;
+      --line-strong: #9da8ae;
+      --accent: #0c6671;
+      --accent-dark: #084c55;
+      --accent-wash: #e9f5f4;
+      --green: #236747;
+      --green-wash: #eaf5ee;
+      --amber: #8a5a08;
+      --amber-wash: #fff5da;
+      --red: #9b3535;
+      --red-wash: #fff0ed;
+      --blue: #315f8e;
+      --blue-wash: #edf3fa;
+      --violet: #665285;
+      --violet-wash: #f3eff8;
+      --code-bg: #172027;
+      --code-ink: #eaf1f2;
+      --shadow: rgba(22, 31, 37, 0.13);
+      --sidebar: 286px;
+      --radius: 10px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --canvas: #10161a;
+        --paper: #182126;
+        --paper-2: #202b31;
+        --ink: #eef3f4;
+        --muted: #b2bdc2;
+        --line: #354349;
+        --line-strong: #617077;
+        --accent: #72c7cb;
+        --accent-dark: #9bd9dc;
+        --accent-wash: #15353a;
+        --green: #8bd1a9;
+        --green-wash: #183429;
+        --amber: #ecc671;
+        --amber-wash: #3b3119;
+        --red: #f1a3a0;
+        --red-wash: #402422;
+        --blue: #9ec2e6;
+        --blue-wash: #1f3040;
+        --violet: #c5afe2;
+        --violet-wash: #30283c;
+        --code-bg: #0c1114;
+        --code-ink: #eaf1f2;
+        --shadow: rgba(0, 0, 0, 0.35);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 20px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.68;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:hover {
+      color: var(--accent-dark);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    a:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid var(--amber);
+      outline-offset: 3px;
+    }
+
+    .shell {
+      width: min(1500px, calc(100% - 28px));
+      margin: 28px auto;
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      align-items: start;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      box-shadow: 0 22px 60px var(--shadow);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 25px 20px 32px;
+      border-right: 1px solid var(--line);
+      background: var(--paper-2);
+    }
+
+    .brand {
+      padding: 2px 4px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand-kicker {
+      display: block;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      display: block;
+      margin-top: 7px;
+      font-size: 19px;
+      font-weight: 850;
+      line-height: 1.3;
+    }
+
+    .progress-wrap {
+      padding: 18px 4px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .progress-track {
+      height: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--paper);
+    }
+
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width .25s ease;
+    }
+
+    .toc {
+      padding: 15px 0;
+    }
+
+    .toc-title {
+      margin: 0 4px 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .toc a {
+      display: block;
+      min-height: 38px;
+      margin: 2px 0;
+      padding: 8px 10px;
+      border-left: 3px solid transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.35;
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a.active {
+      border-left-color: var(--accent);
+      background: var(--accent-wash);
+      color: var(--ink);
+    }
+
+    .sidebar-actions {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .small-button {
+      min-height: 40px;
+      padding: 8px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: var(--paper);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .small-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .document {
+      min-width: 0;
+    }
+
+    .hero {
+      padding: 58px clamp(28px, 5vw, 72px) 46px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent-wash) 54%, transparent) 0%, transparent 70%);
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: 0;
+      line-height: 1.27;
+      letter-spacing: -.02em;
+    }
+
+    h1 {
+      max-width: 940px;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.12;
+    }
+
+    h2 {
+      font-size: clamp(26px, 3vw, 36px);
+    }
+
+    h3 {
+      font-size: 21px;
+    }
+
+    h4 {
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      max-width: 940px;
+      margin: 20px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 25px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--paper);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .hero-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .summary-card {
+      min-height: 142px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--accent);
+      background: var(--paper);
+    }
+
+    .summary-card strong {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 15px;
+    }
+
+    .summary-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    main {
+      padding: 0 clamp(28px, 5vw, 72px) 72px;
+    }
+
+    .section {
+      padding: 48px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section:last-child {
+      border-bottom: 0;
+    }
+
+    .section-lead {
+      max-width: 930px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .anchor-label {
+      display: block;
+      margin-bottom: 9px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .callout {
+      margin-top: 20px;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent);
+      background: var(--accent-wash);
+    }
+
+    .callout strong {
+      color: var(--accent-dark);
+    }
+
+    .callout.warning {
+      border-left-color: var(--amber);
+      background: var(--amber-wash);
+    }
+
+    .callout.warning strong {
+      color: var(--amber);
+    }
+
+    .callout.danger {
+      border-left-color: var(--red);
+      background: var(--red-wash);
+    }
+
+    .callout.danger strong {
+      color: var(--red);
+    }
+
+    .callout.success {
+      border-left-color: var(--green);
+      background: var(--green-wash);
+    }
+
+    .callout.success strong {
+      color: var(--green);
+    }
+
+    .callout p:last-child,
+    .callout ul:last-child {
+      margin-bottom: 0;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul,
+    ol {
+      margin: 10px 0 14px 22px;
+      padding: 0;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: var(--paper-2);
+      font-family: var(--font-mono);
+      font-size: .91em;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 20px;
+      border: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 12px 13px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th:last-child,
+    td:last-child {
+      border-right: 0;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    th {
+      background: var(--paper-2);
+      font-weight: 850;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .status.current {
+      color: var(--green);
+      background: var(--green-wash);
+    }
+
+    .status.build {
+      color: var(--blue);
+      background: var(--blue-wash);
+    }
+
+    .status.production {
+      color: var(--red);
+      background: var(--red-wash);
+    }
+
+    .status.secret {
+      color: var(--violet);
+      background: var(--violet-wash);
+    }
+
+    .roadmap {
+      display: grid;
+      gap: 12px;
+      margin-top: 24px;
+      counter-reset: roadmap;
+    }
+
+    .roadmap-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: 58px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      min-height: 92px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      counter-increment: roadmap;
+    }
+
+    .roadmap-item::before {
+      content: counter(roadmap, decimal-leading-zero);
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border: 1px solid var(--accent);
+      border-radius: 50%;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .roadmap-item strong {
+      display: block;
+      font-size: 16px;
+    }
+
+    .roadmap-item span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .architecture {
+      overflow-x: auto;
+      margin-top: 24px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+    }
+
+    .architecture-flow {
+      min-width: 920px;
+      display: grid;
+      grid-template-columns: 1.1fr 52px 1fr 52px 1.2fr 52px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .arch-node {
+      min-height: 130px;
+      padding: 16px;
+      border: 1px solid var(--line-strong);
+      background: var(--paper);
+    }
+
+    .arch-node strong {
+      display: block;
+      margin-bottom: 9px;
+      color: var(--accent);
+    }
+
+    .arch-node span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .arch-arrow {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 25px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .phase {
+      margin-top: 30px;
+      padding-top: 30px;
+      border-top: 1px solid var(--line);
+    }
+
+    .phase:first-of-type {
+      margin-top: 24px;
+    }
+
+    .phase-head {
+      display: grid;
+      grid-template-columns: 60px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .phase-number {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .purpose-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .purpose {
+      padding: 15px;
+      border: 1px solid var(--line);
+      background: var(--paper-2);
+    }
+
+    .purpose dt {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .purpose dd {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .checklist {
+      display: grid;
+      gap: 10px;
+      margin: 20px 0 0;
+    }
+
+    .check-item {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 13px 15px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .check-item input {
+      width: 18px;
+      height: 18px;
+      margin: 3px 0 0;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .check-item label {
+      cursor: pointer;
+    }
+
+    .check-item label strong {
+      display: block;
+      margin-bottom: 2px;
+      font-size: 14px;
+    }
+
+    .check-item label span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .step-list {
+      margin-top: 22px;
+      counter-reset: procedure;
+    }
+
+    .procedure {
+      position: relative;
+      margin-top: 14px;
+      padding: 20px 20px 20px 66px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      counter-increment: procedure;
+    }
+
+    .procedure::before {
+      content: counter(procedure);
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .procedure h4 {
+      margin-bottom: 7px;
+    }
+
+    .where {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 9px 0 12px;
+    }
+
+    .where span {
+      display: inline-flex;
+      min-height: 25px;
+      align-items: center;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--paper-2);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .code-block {
+      position: relative;
+      margin: 14px 0 0;
+      border: 1px solid #334047;
+      background: var(--code-bg);
+    }
+
+    .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 40px;
+      padding: 6px 8px 6px 14px;
+      border-bottom: 1px solid #334047;
+      color: #9fb0b7;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .copy-button {
+      min-height: 28px;
+      padding: 3px 9px;
+      border: 1px solid #61717a;
+      border-radius: 5px;
+      background: transparent;
+      color: #eaf1f2;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .copy-button:hover {
+      border-color: #9bd9dc;
+      color: #9bd9dc;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 0;
+      padding: 17px;
+      color: var(--code-ink);
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.58;
+      tab-size: 2;
+      white-space: pre;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    details {
+      margin-top: 15px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    summary {
+      min-height: 45px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    details > div {
+      padding: 4px 16px 17px;
+      border-top: 1px solid var(--line);
+    }
+
+    .verify-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .verify-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .verify-card.pass {
+      border-top: 4px solid var(--green);
+    }
+
+    .verify-card.rollback {
+      border-top: 4px solid var(--amber);
+    }
+
+    .verify-card h4 {
+      margin-bottom: 7px;
+    }
+
+    .verify-card ul {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .matrix-card {
+      padding: 17px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .matrix-card strong {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--accent);
+    }
+
+    .matrix-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .incident {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 0;
+      margin-top: 12px;
+      border: 1px solid var(--line);
+    }
+
+    .incident dt,
+    .incident dd {
+      margin: 0;
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .incident dt {
+      background: var(--red-wash);
+      color: var(--red);
+      font-weight: 850;
+    }
+
+    .incident dd {
+      border-left: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .incident dt:last-of-type,
+    .incident dd:last-of-type {
+      border-bottom: 0;
+    }
+
+    .source-list {
+      columns: 2;
+      column-gap: 34px;
+      margin-top: 20px;
+    }
+
+    .source-list li {
+      break-inside: avoid;
+      margin-bottom: 10px;
+    }
+
+    .footer {
+      padding: 30px clamp(28px, 5vw, 72px);
+      border-top: 1px solid var(--line);
+      background: var(--paper-2);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .mobile-bar {
+      display: none;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .no-print {
+      display: initial;
+    }
+
+    @media (max-width: 1100px) {
+      .shell {
+        width: min(100%, calc(100% - 18px));
+        grid-template-columns: 240px minmax(0, 1fr);
+      }
+
+      .hero-summary,
+      .purpose-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .matrix {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 820px) {
+      html {
+        scroll-padding-top: 68px;
+      }
+
+      .shell {
+        width: 100%;
+        margin: 0;
+        display: block;
+        border: 0;
+      }
+
+      .mobile-bar {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 56px;
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--line);
+        background: var(--paper);
+      }
+
+      .mobile-bar strong {
+        font-size: 14px;
+      }
+
+      .menu-button {
+        min-width: 44px;
+        min-height: 40px;
+        border: 1px solid var(--line-strong);
+        border-radius: 6px;
+        background: var(--paper-2);
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 850;
+      }
+
+      .sidebar {
+        position: fixed;
+        top: 56px;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 25;
+        width: 100%;
+        height: auto;
+        transform: translateX(-105%);
+        transition: transform .2s ease;
+        border-right: 0;
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .hero {
+        padding-top: 40px;
+      }
+
+      .roadmap-item {
+        grid-template-columns: 50px 1fr;
+      }
+
+      .roadmap-item > .status {
+        grid-column: 2;
+        justify-self: start;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .hero,
+      main,
+      .footer {
+        padding-left: 19px;
+        padding-right: 19px;
+      }
+
+      .hero-summary,
+      .purpose-grid,
+      .verify-grid,
+      .matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .phase-head {
+        grid-template-columns: 48px minmax(0, 1fr);
+      }
+
+      .phase-number {
+        width: 44px;
+        height: 44px;
+      }
+
+      .procedure {
+        padding: 62px 16px 18px;
+      }
+
+      .procedure::before {
+        top: 15px;
+        left: 15px;
+      }
+
+      .incident {
+        grid-template-columns: 1fr;
+      }
+
+      .incident dd {
+        border-left: 0;
+      }
+
+      .source-list {
+        columns: 1;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+      }
+    }
+
+    @media print {
+      :root {
+        color-scheme: light;
+        --canvas: #fff;
+        --paper: #fff;
+        --paper-2: #f5f5f5;
+        --ink: #111;
+        --muted: #444;
+        --line: #bbb;
+        --accent: #155c64;
+        --code-bg: #f6f6f6;
+        --code-ink: #111;
+      }
+
+      @page {
+        size: A4;
+        margin: 13mm;
+      }
+
+      body {
+        background: #fff;
+        font-size: 10pt;
+      }
+
+      .shell {
+        width: 100%;
+        margin: 0;
+        display: block;
+        border: 0;
+        box-shadow: none;
+      }
+
+      .sidebar,
+      .mobile-bar,
+      .copy-button,
+      .no-print {
+        display: none !important;
+      }
+
+      .hero,
+      main,
+      .footer {
+        padding-left: 0;
+        padding-right: 0;
+      }
+
+      .hero {
+        padding-top: 0;
+      }
+
+      h1 {
+        font-size: 29pt;
+      }
+
+      h2 {
+        font-size: 20pt;
+      }
+
+      .section,
+      .phase,
+      .procedure,
+      .verify-card,
+      .callout,
+      details,
+      table {
+        break-inside: avoid;
+      }
+
+      details > div {
+        display: block;
+      }
+
+      .code-block {
+        border-color: #aaa;
+      }
+
+      pre {
+        color: #111;
+        white-space: pre-wrap;
+        font-size: 8pt;
+      }
+
+      a {
+        color: #111;
+      }
+
+      a[href^="http"]::after {
+        content: " (" attr(href) ")";
+        font-size: 8pt;
+        word-break: break-all;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="mobile-bar">
+    <strong>Ultimate Hermes 보안 매뉴얼</strong>
+    <button class="menu-button" id="menu-button" type="button" aria-expanded="false" aria-controls="sidebar">메뉴</button>
+  </div>
+
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="문서 목차">
+      <div class="brand">
+        <span class="brand-kicker">Operator Manual</span>
+        <span class="brand-title">Ultimate Hermes MCP<br>보안 강화</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-label">
+          <span>실행 체크리스트</span>
+          <span id="progress-text">0 / 0</span>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+      </div>
+
+      <nav class="toc" aria-label="페이지 내 이동">
+        <p class="toc-title">Start</p>
+        <a href="#start">0. 먼저 읽기</a>
+        <a href="#current-state">1. 현재 상태</a>
+        <a href="#target">2. 목표 구조</a>
+        <a href="#order">3. 전체 실행 순서</a>
+        <p class="toc-title">Execution</p>
+        <a href="#phase-0">4. 기준선·백업</a>
+        <a href="#phase-1">5. DB 권한 축소</a>
+        <a href="#phase-2">6. 기기별 API Key</a>
+        <a href="#phase-3">7. Client별 로그</a>
+        <a href="#phase-4">8. Rate limit·IP 차단</a>
+        <a href="#phase-5">9. DB 네트워크 제한</a>
+        <a href="#phase-6">10. 정기 백업·복구</a>
+        <a href="#phase-7">11. OAuth 전환</a>
+        <p class="toc-title">Operations</p>
+        <a href="#cutover">12. 배포·전환</a>
+        <a href="#incident">13. 사고 대응</a>
+        <a href="#acceptance">14. 완료 기준</a>
+        <a href="#reference">15. 참고 자료</a>
+      </nav>
+
+      <div class="sidebar-actions no-print">
+        <button class="small-button" type="button" id="print-button">PDF로 인쇄</button>
+        <button class="small-button" type="button" id="reset-button">체크 초기화</button>
+      </div>
+    </aside>
+
+    <article class="document">
+      <header class="hero">
+        <p class="eyebrow">Ultimate Hermes / Render / Supabase</p>
+        <h1 data-pretext>원격 MCP 보안 강화 실행 매뉴얼</h1>
+        <p class="hero-copy" data-pretext>
+          현재의 공유 Bearer token 구조에서 기기별 식별, 최소 권한 DB 계정, 인증 실패 제한,
+          client별 감사 로그, 네트워크 제한, 검증 가능한 백업으로 이동하는 절차입니다.
+          정상 운영의 원격 쓰기는 유지하며, 사고 때만 쓰기 차단을 사용합니다.
+        </p>
+        <div class="meta">
+          <span class="pill">작성 기준 2026-08-07 KST</span>
+          <span class="pill">대상 branch feat/add-on-hermes</span>
+          <span class="pill">운영 URL ultimate-hermes-mcp.onrender.com</span>
+          <span class="pill">문서 유형 실행 매뉴얼 + 기술 참고</span>
+        </div>
+
+        <div class="hero-summary">
+          <div class="summary-card">
+            <strong>가장 먼저</strong>
+            <span>복구 지점을 확인한 뒤 Render가 가진 DB 관리자 권한부터 제거합니다.</span>
+          </div>
+          <div class="summary-card">
+            <strong>쓰기는 유지</strong>
+            <span><code>capture_event</code>와 <code>link_source</code>는 핵심 기능입니다. 정상 운영에서 끄지 않습니다.</span>
+          </div>
+          <div class="summary-card">
+            <strong>기기 단위 통제</strong>
+            <span>Codex, Claude Code, Hermes에 서로 다른 key를 발급하고 각각 폐기·추적합니다.</span>
+          </div>
+          <div class="summary-card">
+            <strong>최종 상태</strong>
+            <span>Marketplace 설치 후 browser OAuth로 연결하고 장기 공유 secret을 없앱니다.</span>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="section" id="start">
+          <span class="anchor-label">0 / Read this first</span>
+          <h2>이 문서를 사용하는 방법</h2>
+          <p class="section-lead">
+            각 단계는 같은 형식으로 구성되어 있습니다. 먼저 목적과 작업 장소를 확인하고,
+            절차를 실행한 뒤 검증이 통과해야 다음 단계로 이동합니다. 실패하면 해당 단계의
+            롤백만 수행합니다.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>표시</th>
+                  <th>뜻</th>
+                  <th>행동 원칙</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="status current">현재 상태</span></td>
+                  <td>이미 코드나 운영 환경에 존재하는 동작</td>
+                  <td>문서의 설명과 실제 출력이 같은지 읽기 전용으로 확인합니다.</td>
+                </tr>
+                <tr>
+                  <td><span class="status build">구현 작업</span></td>
+                  <td>아직 production에 없는 코드·migration·test</td>
+                  <td>repository에서 구현하고 staging 검증 후 배포합니다. 예시를 production에 즉시 붙여 넣지 않습니다.</td>
+                </tr>
+                <tr>
+                  <td><span class="status production">운영 변경</span></td>
+                  <td>Render 또는 Supabase production 설정 변경</td>
+                  <td>백업과 롤백 경로를 먼저 확보하고 한 번에 한 항목만 변경합니다.</td>
+                </tr>
+                <tr>
+                  <td><span class="status secret">Secret</span></td>
+                  <td>API key, DB URL, password, OAuth credential</td>
+                  <td>문서·Git·채팅·로그에 붙이지 않습니다. Dashboard secret 또는 password manager로 옮깁니다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger">
+            <p><strong>금지:</strong> production Supabase의 <code>postgres</code> password, Render secret,
+              실제 API key를 이 HTML이나 Git commit에 기록하지 마십시오. 모든 예시의
+              <code>&lt;PLACEHOLDER&gt;</code>는 실제 값으로 로컬에서만 치환합니다.</p>
+          </div>
+
+          <div class="callout warning">
+            <p><strong>변경 동결 기준:</strong> backup을 확인하지 못했거나, 승인된 admin 접속 경로를
+              설명할 수 없거나, staging에서 같은 변경을 재현하지 못했다면 production 변경을 멈춥니다.</p>
+          </div>
+        </section>
+
+        <section class="section" id="current-state">
+          <span class="anchor-label">1 / Current state</span>
+          <h2>현재 보호 장치와 남은 위험</h2>
+          <p class="section-lead">
+            현재 token 자체를 온라인 brute force로 맞히는 것은 현실적인 공격 경로가 아닙니다.
+            64자리 hex는 256-bit random secret이고 같은 길이일 때 constant-time 비교를 합니다.
+            더 큰 문제는 token 하나가 모든 기기와 모든 읽기·쓰기를 대표한다는 점입니다.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>영역</th>
+                  <th>현재 상태</th>
+                  <th>판단</th>
+                  <th>근거 위치</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Bearer 인증</td>
+                  <td>단일 <code>HERMES_API_TOKEN</code>, <code>timingSafeEqual</code></td>
+                  <td>추측 방어는 충분하지만 client 식별·개별 폐기·만료가 없음</td>
+                  <td><code>src/remote/auth.ts</code>, <code>src/config/env.ts</code></td>
+                </tr>
+                <tr>
+                  <td>원격 쓰기</td>
+                  <td><code>HERMES_ALLOW_REMOTE_WRITES=true</code></td>
+                  <td>필수 기능이므로 유지. 단, writer identity와 scope를 추가해야 함</td>
+                  <td><code>render.yaml</code>, <code>src/mcp/server.ts</code></td>
+                </tr>
+                <tr>
+                  <td>DB 계정</td>
+                  <td>Render가 migration 가능한 관리자급 DSN을 보유하고 startup migration 실행</td>
+                  <td>가장 큰 권한 확대 경로. 최우선 수정</td>
+                  <td><code>src/server/index.ts</code>, <code>src/db/client.ts</code></td>
+                </tr>
+                <tr>
+                  <td>민감도</td>
+                  <td>token 보유자는 <code>personal</code>, <code>confidential</code>, <code>legal_sensitive</code> 전체 조회 가능</td>
+                  <td>client별 sensitivity ceiling이 필요</td>
+                  <td><code>src/remote/lifeArchive.ts</code></td>
+                </tr>
+                <tr>
+                  <td>Rate limit</td>
+                  <td>invalid token에 계속 <code>401</code>, <code>429</code>와 <code>Retry-After</code> 없음</td>
+                  <td>비용·가용성·관측성 위험</td>
+                  <td><code>src/server/app.ts</code></td>
+                </tr>
+                <tr>
+                  <td>감사 로그</td>
+                  <td>client identity와 tool invocation을 연결하는 구조화 로그 없음</td>
+                  <td>유출 기기와 공격 범위 식별이 어려움</td>
+                  <td><code>life_audit_log</code>는 remote 경로에서 미사용</td>
+                </tr>
+                <tr>
+                  <td>네트워크</td>
+                  <td>Render MCP URL과 Supabase DB endpoint 모두 인터넷에서 도달 가능</td>
+                  <td>MCP URL 공개는 가능하나 DB는 Render/admin 경로로 제한해야 함</td>
+                  <td>Render + Supabase Dashboard</td>
+                </tr>
+                <tr>
+                  <td>백업</td>
+                  <td>Supabase plan 정책에 의존, 복구 훈련 기록 없음</td>
+                  <td>백업 존재와 복구 가능성은 별개. 정기 restore drill 필요</td>
+                  <td>Supabase Database Backups</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout success">
+            <p><strong>유지할 것:</strong> public MCP URL, append-only write tools, Host/Origin 검사,
+              non-root container, RLS 활성화, JSON body limit, HTTPS는 그대로 둡니다. 보안은 기능 제거가 아니라
+              identity·권한·관측·복구를 추가하는 방식으로 강화합니다.</p>
+          </div>
+        </section>
+
+        <section class="section" id="target">
+          <span class="anchor-label">2 / Target architecture</span>
+          <h2>목표 보안 경계</h2>
+          <p class="section-lead">
+            Agent는 DB password를 받지 않습니다. Agent는 기기별 key 또는 OAuth access token으로
+            Render에 접근하고, Render는 제한된 <code>hermes_runtime</code> 역할로만 Supabase를 읽고 씁니다.
+            schema 변경은 별도 migration runner만 수행합니다.
+          </p>
+
+          <div class="architecture" role="img" aria-label="Client에서 Render와 Supabase로 이어지는 목표 보안 구조">
+            <div class="architecture-flow">
+              <div class="arch-node">
+                <strong>Codex / Claude / Hermes</strong>
+                <span>기기별 identity<br>memory:read / memory:write<br>개별 revoke</span>
+              </div>
+              <div class="arch-arrow" aria-hidden="true">→</div>
+              <div class="arch-node">
+                <strong>Edge guard</strong>
+                <span>IP burst 제한<br>global concurrency<br>coarse abuse 차단</span>
+              </div>
+              <div class="arch-arrow" aria-hidden="true">→</div>
+              <div class="arch-node">
+                <strong>Render MCP</strong>
+                <span>client policy<br>sensitivity ceiling<br>tool authorization<br>구조화 audit</span>
+              </div>
+              <div class="arch-arrow" aria-hidden="true">→</div>
+              <div class="arch-node">
+                <strong>Supabase</strong>
+                <span>hermes_runtime<br>NO BYPASSRLS<br>필요 table·operation만 허용</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout">
+            <p><strong>별도 경로:</strong> GitHub protected environment 또는 격리된 migration job이
+              admin DSN을 사용합니다. Render web process에는 migration/admin secret이 없어야 합니다.</p>
+          </div>
+        </section>
+
+        <section class="section" id="order">
+          <span class="anchor-label">3 / Recommended order</span>
+          <h2>전체 실행 순서와 의존성</h2>
+          <p class="section-lead">
+            아래 순서를 바꾸지 않는 편이 안전합니다. 특히 Supabase Network Restrictions는
+            승인된 접속 경로와 rollback을 확인한 뒤 적용해야 합니다.
+          </p>
+
+          <div class="roadmap">
+            <div class="roadmap-item">
+              <div><strong>기준선·복구 지점 확보</strong><span>현재 health, read, write, DB role, backup 상태를 기록합니다.</span></div>
+              <span class="status current">읽기 중심</span>
+            </div>
+            <div class="roadmap-item">
+              <div><strong>DB runtime 최소 권한화</strong><span>web process에서 관리자 DSN과 startup migration을 제거합니다.</span></div>
+              <span class="status build">최우선</span>
+            </div>
+            <div class="roadmap-item">
+              <div><strong>기기별 key와 client 정책</strong><span>Codex, Claude, Hermes를 별도 identity로 전환합니다.</span></div>
+              <span class="status build">Dual auth</span>
+            </div>
+            <div class="roadmap-item">
+              <div><strong>구조화 로그와 경보</strong><span>누가, 언제, 어떤 tool을, 어떤 결과로 호출했는지 남깁니다.</span></div>
+              <span class="status build">관측</span>
+            </div>
+            <div class="roadmap-item">
+              <div><strong>Rate limit과 임시 IP 차단</strong><span>실패 인증을 방치하지 않고 429·Retry-After·경보로 통제합니다.</span></div>
+              <span class="status build">가용성</span>
+            </div>
+            <div class="roadmap-item">
+              <div><strong>Supabase 네트워크 제한</strong><span>Render egress와 승인된 admin 경로만 DB에 접근하게 합니다.</span></div>
+              <span class="status production">잠금 주의</span>
+            </div>
+            <div class="roadmap-item">
+              <div><strong>정기 백업과 복구 훈련</strong><span>보관 기간, 외부 export, test restore, RPO/RTO를 검증합니다.</span></div>
+              <span class="status production">운영</span>
+            </div>
+            <div class="roadmap-item">
+              <div><strong>OAuth 2.1 전환</strong><span>Marketplace 설치 후 browser login으로 장기 공유 secret을 제거합니다.</span></div>
+              <span class="status build">최종 상태</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-0">
+          <span class="anchor-label">4 / Phase 0</span>
+          <div class="phase-head">
+            <div class="phase-number">P0</div>
+            <div>
+              <h2>기준선과 복구 지점 확보</h2>
+              <p class="section-lead">변경 전 정상 동작을 숫자와 출력으로 고정합니다. 그래야 배포 후 무엇이 깨졌는지 바로 알 수 있습니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>보안 변경이 read/write를 망가뜨렸을 때 원인을 구분하고 즉시 되돌리기 위해서입니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd>health, readiness, authenticated read/write, DB role, row count, backup status를 기록합니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>로컬 terminal, Render Dashboard/Logs, Supabase Dashboard에서 수행합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>변경 전 결과와 rollback 책임자·경로가 한 장의 기록에 모여 있어야 합니다.</dd></div>
+          </dl>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4>작업 branch와 현재 검증 결과를 고정합니다</h4>
+              <div class="where"><span>로컬 terminal</span><span>repository</span><span>읽기 전용</span></div>
+              <p>보안 작업은 별도 branch에서 수행합니다. 현재 working tree에 다른 변경이 있으면 덮어쓰지 않습니다.</p>
+              <div class="code-block">
+                <div class="code-head"><span>shell / repository baseline</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>git status --short
+git branch --show-current
+npm ci
+npm run verify</code></pre>
+              </div>
+            </div>
+
+            <div class="procedure">
+              <h4>운영 health와 인증 동작을 기록합니다</h4>
+              <div class="where"><span>로컬 terminal</span><span>Render production</span><span>Secret 주의</span></div>
+              <p>token을 command line argument에 직접 넣지 말고 현재 shell에서 조용히 읽습니다. 출력이나 shell history에 token이 남지 않아야 합니다.</p>
+              <div class="code-block">
+                <div class="code-head"><span>shell / safe smoke baseline</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>BASE_URL="https://ultimate-hermes-mcp.onrender.com"
+curl --fail --silent --show-error "$BASE_URL/api/v1/health"
+curl --fail --silent --show-error "$BASE_URL/api/v1/ready"
+
+IFS= read -r -s HERMES_TEST_TOKEN
+export HERMES_TEST_TOKEN
+printf '\n'
+
+curl --silent --show-error \
+  -H "Authorization: Bearer $HERMES_TEST_TOKEN" \
+  "$BASE_URL/api/v1/events/recent?limit=1"
+
+unset HERMES_TEST_TOKEN</code></pre>
+              </div>
+            </div>
+
+            <div class="procedure">
+              <h4>Supabase backup과 현재 DB role을 확인합니다</h4>
+              <div class="where"><span>Supabase Dashboard</span><span>Database Backups</span><span>SQL Editor</span></div>
+              <ol>
+                <li>Supabase project에서 <strong>Database → Backups</strong>로 이동합니다.</li>
+                <li>가장 최근 성공 시각, 보관 기간, PITR 활성 여부를 캡처합니다.</li>
+                <li>SQL Editor에서 아래 읽기 전용 query로 현재 runtime role을 확인합니다.</li>
+              </ol>
+              <div class="code-block">
+                <div class="code-head"><span>sql / current runtime identity</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>select
+  current_user,
+  session_user,
+  rolname,
+  rolsuper,
+  rolcreaterole,
+  rolcreatedb,
+  rolbypassrls
+from pg_roles
+where rolname = current_user;</code></pre>
+              </div>
+              <div class="callout warning">
+                <p><strong>현재 기대 결과:</strong> 관리자급 <code>postgres</code> 계정이라면
+                  <code>rolbypassrls</code>, <code>rolcreaterole</code>, <code>rolcreatedb</code> 중 일부가
+                  true일 수 있습니다. 이것이 Phase 1에서 제거할 위험입니다.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p0-1" data-check><label for="c-p0-1"><strong><code>npm run verify</code> 통과</strong><span>변경 전 code baseline을 확보했습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p0-2" data-check><label for="c-p0-2"><strong>운영 health·ready·read smoke 기록</strong><span>정상 응답과 상태 코드를 보관했습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p0-3" data-check><label for="c-p0-3"><strong>최근 backup 성공 확인</strong><span>복구 지점과 retention을 확인했습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p0-4" data-check><label for="c-p0-4"><strong>현재 DB role 증거 확보</strong><span>전환 후 비교할 <code>current_user</code>와 privilege를 기록했습니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-1">
+          <span class="anchor-label">5 / Phase 1</span>
+          <div class="phase-head">
+            <div class="phase-number">P1</div>
+            <div>
+              <h2>Render의 DB 권한을 최소화</h2>
+              <p class="section-lead">MCP process가 침해돼도 role·schema·RLS를 변경할 수 없도록 blast radius를 줄입니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>현재 web process의 DB credential 탈취가 DB 관리자 권한 탈취로 이어질 수 있습니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd><code>hermes_runtime</code> role, 최소 grant, 명시적 RLS policy, migration runner 분리를 만듭니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>repository migration/code, staging Supabase, GitHub protected environment, Render env에서 작업합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>Render의 <code>current_user</code>가 <code>hermes_runtime</code>이고 DDL·BYPASSRLS가 실패해야 합니다.</dd></div>
+          </dl>
+
+          <div class="callout danger">
+            <p><strong>production SQL을 먼저 실행하지 마십시오.</strong> 아래 SQL은 구현 설계의 뼈대입니다.
+              repository migration으로 작성하고 staging에서 application query 전체를 검증한 뒤 production에 적용합니다.</p>
+          </div>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4>startup migration을 web process에서 분리합니다 <span class="status build">구현 작업</span></h4>
+              <div class="where"><span><code>src/server/index.ts</code></span><span><code>src/db/client.ts</code></span><span><code>package.json</code></span></div>
+              <ol>
+                <li><code>src/server/index.ts</code>의 unconditional <code>await migrate()</code>를 제거합니다.</li>
+                <li>web startup은 schema version을 읽기 전용으로 확인하고 expected version과 다르면 fail closed합니다.</li>
+                <li><code>npm run db:migrate</code>는 migration-only entrypoint로 유지합니다.</li>
+                <li>migration/admin DSN은 GitHub protected environment 또는 격리된 one-off job에만 둡니다.</li>
+              </ol>
+              <div class="callout warning">
+                <p><strong>피해야 할 구성:</strong> 같은 Render web service의 environment에 admin DSN을 넣고
+                  <code>preDeployCommand</code>에서만 사용하면 runtime process도 그 secret을 읽을 수 있습니다.
+                  credential 격리가 아닙니다.</p>
+              </div>
+            </div>
+
+            <div class="procedure">
+              <h4><code>0005_runtime_role_hardening.sql</code> migration을 작성합니다 <span class="status build">구현 작업</span></h4>
+              <div class="where"><span><code>src/db/migrations/</code></span><span>staging 먼저</span></div>
+              <p>role 생성은 password 없이 <code>NOLOGIN</code>으로 migration에 넣고, password는 배포 단계에서
+                <code>psql \password</code>로 설정합니다. secret을 SQL file과 SQL Editor history에 남기지 않습니다.</p>
+              <div class="code-block">
+                <div class="code-head"><span>sql / migration design skeleton</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'hermes_runtime') then
+    create role hermes_runtime
+      nologin
+      nosuperuser
+      nocreatedb
+      nocreaterole
+      noinherit
+      noreplication
+      nobypassrls;
+  end if;
+end
+$$;
+
+grant connect on database postgres to hermes_runtime;
+grant usage on schema public to hermes_runtime;
+
+grant select on
+  public.schema_migrations,
+  public.life_events,
+  public.life_sources,
+  public.life_external_refs,
+  public.life_embeddings,
+  public.life_project_snapshots
+to hermes_runtime;
+
+grant insert on
+  public.life_events,
+  public.life_sources,
+  public.life_embeddings,
+  public.life_recall_hits
+to hermes_runtime;
+
+grant update, delete on public.life_embeddings to hermes_runtime;
+
+alter table public.life_events enable row level security;
+alter table public.life_sources enable row level security;
+alter table public.life_external_refs enable row level security;
+alter table public.life_embeddings enable row level security;
+alter table public.life_project_snapshots enable row level security;
+alter table public.life_recall_hits enable row level security;
+
+create policy hermes_runtime_read_events
+  on public.life_events for select
+  to hermes_runtime using (true);
+
+create policy hermes_runtime_insert_events
+  on public.life_events for insert
+  to hermes_runtime with check (true);
+
+-- 나머지 table도 실제 query별 SELECT / INSERT / UPDATE / DELETE를
+-- 같은 방식으로 분리합니다. blanket ALL policy는 만들지 않습니다.</code></pre>
+              </div>
+              <details>
+                <summary>현재 remote tool이 실제로 요구하는 table 권한</summary>
+                <div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead><tr><th>기능</th><th>Table</th><th>필요 operation</th></tr></thead>
+                      <tbody>
+                        <tr><td>recent / recall / timeline / context pack</td><td><code>life_events</code>, <code>life_embeddings</code></td><td>SELECT</td></tr>
+                        <tr><td>memory status</td><td><code>life_events</code>, <code>life_sources</code>, <code>life_external_refs</code>, <code>life_embeddings</code>, <code>pg_extension</code></td><td>SELECT</td></tr>
+                        <tr><td>capture event</td><td><code>life_events</code></td><td>INSERT, RETURNING</td></tr>
+                        <tr><td>link source</td><td><code>life_sources</code>, referenced <code>life_events</code></td><td>INSERT, SELECT for FK check</td></tr>
+                        <tr><td>semantic embedding</td><td><code>life_embeddings</code></td><td>SELECT, INSERT, UPDATE, DELETE</td></tr>
+                        <tr><td>recall audit</td><td><code>life_recall_hits</code></td><td>INSERT</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div class="procedure">
+              <h4>runtime password를 비공개로 설정하고 staging DSN을 만듭니다 <span class="status secret">Secret</span></h4>
+              <div class="where"><span>staging terminal</span><span><code>psql</code></span><span>password manager</span></div>
+              <p><code>\password</code>는 password를 prompt로 받아 shell history에 남기지 않습니다.</p>
+              <div class="code-block">
+                <div class="code-head"><span>psql / set runtime password interactively</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>\password hermes_runtime
+alter role hermes_runtime login;
+
+select rolname, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls
+from pg_roles
+where rolname = 'hermes_runtime';</code></pre>
+              </div>
+              <p class="muted">기대 결과: <code>rolcanlogin=true</code>, 나머지 관리자 속성은 모두 <code>false</code>.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>staging에서 허용·거부 행렬을 검증합니다</h4>
+              <div class="where"><span>staging Render</span><span>staging Supabase</span><span>integration test</span></div>
+              <div class="matrix">
+                <div class="matrix-card"><strong>허용</strong><span>recent, recall, timeline, context pack, authorized capture_event, link_source</span></div>
+                <div class="matrix-card"><strong>거부</strong><span>CREATE TABLE, ALTER POLICY, DROP, CREATE ROLE, SET ROLE postgres, auth schema read</span></div>
+                <div class="matrix-card"><strong>증거</strong><span>integration test output와 <code>current_user=hermes_runtime</code> 로그</span></div>
+              </div>
+              <div class="code-block">
+                <div class="code-head"><span>sql / negative privilege tests</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>select current_user;
+create table public.hermes_runtime_must_fail (id int);
+set role postgres;
+select * from auth.users limit 1;</code></pre>
+              </div>
+              <p class="muted">세 번째 query 모두 permission error가 나야 통과입니다. test transaction 또는 disposable staging에서만 실행합니다.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>Render production의 DB URL을 runtime DSN으로 교체합니다 <span class="status production">운영 변경</span></h4>
+              <div class="where"><span>Render Dashboard</span><span>Environment</span><span>Supabase pooler</span></div>
+              <ol>
+                <li>Render service → <strong>Environment</strong>로 이동합니다.</li>
+                <li><code>HERMES_DATABASE_URL</code>을 <code>hermes_runtime</code> session-pooler DSN으로 교체합니다.</li>
+                <li><code>HERMES_MIGRATION_DATABASE_URL</code>이 web service에 있다면 제거합니다.</li>
+                <li>배포 후 health와 authorized read/write smoke를 수행합니다.</li>
+                <li>성공 후 기존 관리자 DB password를 회전하고 agent 장비에서 admin DSN을 제거합니다.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="verify-grid">
+            <div class="verify-card pass">
+              <h4>통과 기준</h4>
+              <ul>
+                <li>Render에서 <code>current_user=hermes_runtime</code></li>
+                <li><code>rolbypassrls=false</code></li>
+                <li>필수 read와 append-only write 성공</li>
+                <li>DDL·role 변경·auth schema 접근 실패</li>
+                <li>web environment에 admin/migration DSN 없음</li>
+              </ul>
+            </div>
+            <div class="verify-card rollback">
+              <h4>롤백</h4>
+              <ul>
+                <li>기존 web version으로 rollback</li>
+                <li>DB URL만 이전 값으로 임시 복구</li>
+                <li>rollback 중에도 authorized append 유지</li>
+                <li>침해 증거가 있을 때만 writes kill switch 사용</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p1-1" data-check><label for="c-p1-1"><strong>startup migration 제거</strong><span>web process가 schema를 변경하지 않습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p1-2" data-check><label for="c-p1-2"><strong><code>hermes_runtime</code> staging 행렬 통과</strong><span>필수 기능만 허용되고 DDL은 거부됩니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p1-3" data-check><label for="c-p1-3"><strong>migration credential 격리</strong><span>web service가 admin DSN을 보유하지 않습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p1-4" data-check><label for="c-p1-4"><strong>production runtime DSN 전환</strong><span>health와 authorized read/write가 모두 통과했습니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-2">
+          <span class="anchor-label">6 / Phase 2</span>
+          <div class="phase-head">
+            <div class="phase-number">P2</div>
+            <div>
+              <h2>기기별 API Key와 권한 맵핑</h2>
+              <p class="section-lead">한 기기의 key가 유출돼도 그 기기만 60초 안에 폐기하고, 사건 로그에서 어느 client인지 식별합니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>공유 token은 유출 출처 식별과 개별 revoke가 불가능합니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd>key ID, HMAC verifier, permissions, sensitivity ceiling, expiry, revoke 상태를 저장합니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>repository auth middleware·migration·admin CLI와 각 client config에서 작업합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>Codex·Claude·Hermes가 서로 다른 key를 쓰고 하나를 폐기해도 나머지는 정상이어야 합니다.</dd></div>
+          </dl>
+
+          <div class="callout">
+            <p><strong>key 설계:</strong> raw key는 DB에 저장하지 않습니다. 공개 prefix와 256-bit random secret을 합친 뒤,
+              server-side pepper를 사용한 HMAC-SHA-256 verifier만 저장합니다. 사용자가 외우는 password가 아니므로
+              random key 검증에 느린 password hash를 강제로 쓸 필요는 없습니다.</p>
+          </div>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4><code>hermes_api_keys</code> schema와 admin CLI를 구현합니다 <span class="status build">구현 작업</span></h4>
+              <div class="where"><span><code>src/db/migrations/</code></span><span><code>src/cli/</code></span><span><code>src/remote/auth.ts</code></span></div>
+              <div class="code-block">
+                <div class="code-head"><span>sql / key registry shape</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>create table public.hermes_api_keys (
+  key_id uuid primary key,
+  key_prefix text not null unique,
+  name text not null,
+  verifier bytea not null,
+  permissions text[] not null,
+  sensitivity_ceiling text not null,
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  last_used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.hermes_api_keys enable row level security;
+revoke all on public.hermes_api_keys from anon, authenticated;
+
+grant select (
+  key_id, key_prefix, name, verifier, permissions,
+  sensitivity_ceiling, expires_at, revoked_at
+) on public.hermes_api_keys to hermes_runtime;
+
+create policy hermes_runtime_verify_keys
+  on public.hermes_api_keys for select
+  to hermes_runtime using (true);</code></pre>
+              </div>
+              <p>runtime은 검증에 필요한 열만 읽고 INSERT·UPDATE·DELETE는 받지 않습니다.
+                더 강한 분리를 원하면 <code>SECURITY DEFINER</code> verifier function 또는 별도 auth schema를 사용하되,
+                function의 <code>search_path</code>를 고정하고 EXECUTE 권한만 부여합니다.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>auth middleware가 identity를 반환하게 바꿉니다 <span class="status build">구현 작업</span></h4>
+              <div class="where"><span><code>src/remote/auth.ts</code></span><span><code>src/server/app.ts</code></span><span><code>src/mcp/server.ts</code></span></div>
+              <p>인증 성공 결과에 다음 값을 넣고 request context로 전달합니다.</p>
+              <div class="code-block">
+                <div class="code-head"><span>typescript / authenticated principal</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>type AuthPrincipal = {
+  subject: string;
+  clientId: string;
+  keyId: string;
+  permissions: Array&lt;"memory:read" | "memory:write"&gt;;
+  sensitivityCeiling:
+    | "public"
+    | "personal"
+    | "confidential"
+    | "legal_sensitive";
+};</code></pre>
+              </div>
+              <ul>
+                <li>read tool은 <code>memory:read</code>를 요구합니다.</li>
+                <li><code>capture_event</code>, <code>link_source</code>는 <code>memory:write</code>를 요구합니다.</li>
+                <li>write scope는 append-only tools에만 연결합니다. 임의 SQL·DDL 권한이 아닙니다.</li>
+                <li>caller가 보낸 sensitivity filter는 ceiling을 넓힐 수 없어야 합니다.</li>
+              </ul>
+            </div>
+
+            <div class="procedure">
+              <h4>세 client에 서로 다른 정책을 발급합니다</h4>
+              <div class="where"><span>admin CLI</span><span>password manager</span><span>client config</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Client</th><th>Key name 예시</th><th>Permissions</th><th>민감도 ceiling</th><th>저장 위치</th></tr></thead>
+                  <tbody>
+                    <tr><td>이 Mac의 Codex</td><td><code>codex-kay-macbook</code></td><td>read, write</td><td>필요 수준 명시</td><td>Codex MCP secret config</td></tr>
+                    <tr><td>새 기기의 Claude Code</td><td><code>claude-device-name</code></td><td>처음에는 read, 필요 시 write 승격</td><td>기본 personal 권장</td><td>Claude secure config / env</td></tr>
+                    <tr><td>Hermes Agent</td><td><code>hermes-host-name</code></td><td>read, write</td><td>업무상 필요한 수준</td><td>Hermes secret store</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="callout warning">
+                <p><strong>초기 trusted client:</strong> 현재 write를 실제로 사용하는 Codex, Claude, Hermes에는
+                  각각 독립적인 <code>memory:read memory:write</code> key를 발급해 기능을 유지합니다.
+                  read-only는 신규·미확인 client의 기본값이지 기존 기능을 끄는 수단이 아닙니다.</p>
+              </div>
+            </div>
+
+            <div class="procedure">
+              <h4>legacy token과 새 key를 dual-auth로 짧게 운영합니다 <span class="status production">운영 변경</span></h4>
+              <div class="where"><span>Render</span><span>Codex</span><span>Claude Code</span><span>Hermes</span></div>
+              <ol>
+                <li>서버가 legacy token과 new key를 동시에 검증하는 feature flag를 배포합니다.</li>
+                <li>Codex key 교체 → read/write smoke → 로그에서 client ID 확인.</li>
+                <li>Claude Code key 교체 → 동일 검증.</li>
+                <li>Hermes key 교체 → 동일 검증.</li>
+                <li>24시간 이상 legacy token 사용이 없는지 로그로 확인합니다.</li>
+                <li>legacy shared token을 폐기하고 dual-auth flag를 제거합니다.</li>
+              </ol>
+            </div>
+
+            <div class="procedure">
+              <h4>개별 revoke를 실제로 연습합니다</h4>
+              <div class="where"><span>admin CLI</span><span>staging 먼저</span></div>
+              <p>한 client key를 revoke하면 그 client만 <code>401</code> 또는 <code>403</code>이 되고, 나머지 client는 정상이어야 합니다.
+                revoke 후 재사용 시도는 audit와 alert에 남아야 합니다.</p>
+            </div>
+          </div>
+
+          <div class="verify-grid">
+            <div class="verify-card pass">
+              <h4>통과 기준</h4>
+              <ul>
+                <li>key별 client ID가 로그에 표시</li>
+                <li>read-only key의 write는 <code>403 insufficient_scope</code></li>
+                <li>민감도 ceiling 우회 불가</li>
+                <li>raw key가 DB·로그·error에 없음</li>
+                <li>개별 revoke가 60초 안에 반영</li>
+              </ul>
+            </div>
+            <div class="verify-card rollback">
+              <h4>롤백</h4>
+              <ul>
+                <li>dual-auth 기간에는 legacy token으로 복구 가능</li>
+                <li>legacy token 폐기 후 fallback은 scoped per-device key</li>
+                <li>공유 write token 재도입은 금지</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p2-1" data-check><label for="c-p2-1"><strong>key registry와 admin CLI 구현</strong><span>raw key는 한 번만 표시되고 DB에는 verifier만 남습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p2-2" data-check><label for="c-p2-2"><strong>권한·민감도 test 통과</strong><span>scope와 sensitivity ceiling이 모든 tool에 강제됩니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p2-3" data-check><label for="c-p2-3"><strong>세 client 분리 완료</strong><span>Codex·Claude·Hermes가 서로 다른 key를 사용합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p2-4" data-check><label for="c-p2-4"><strong>legacy shared token 폐기</strong><span>로그에서 사용 없음 확인 후 production auth 경로에서 제거했습니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-3">
+          <span class="anchor-label">7 / Phase 3</span>
+          <div class="phase-head">
+            <div class="phase-number">P3</div>
+            <div>
+              <h2>Client별 구조화 로그와 경보</h2>
+              <p class="section-lead">보안 사고에서 가장 먼저 답해야 하는 질문은 “어느 기기가, 언제부터, 무엇을 했는가”입니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>공격 탐지, 유출 기기 식별, 영향 범위 계산, false positive 해소에 필요합니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd>request ID, client/key ID, tool, decision, status, latency, result size, IP 표현을 기록합니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>Express middleware, MCP invocation wrapper, Render Logs, 선택한 log sink에서 작업합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>한 요청을 edge → app → DB error까지 request ID 하나로 추적할 수 있어야 합니다.</dd></div>
+          </dl>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>기록할 필드</th><th>예시</th><th>이유</th></tr></thead>
+              <tbody>
+                <tr><td><code>timestamp</code>, <code>request_id</code></td><td>UTC ISO 8601, random UUID</td><td>분산 로그 상관관계</td></tr>
+                <tr><td><code>client_id</code>, <code>key_id</code></td><td>공개 식별자</td><td>기기 attribution과 revoke 확인</td></tr>
+                <tr><td><code>tool</code>, <code>decision</code></td><td>recall_events, allow/deny</td><td>권한 정책과 공격 의도 확인</td></tr>
+                <tr><td><code>status</code>, <code>latency_ms</code>, <code>result_bytes</code></td><td>200, 83, 14210</td><td>오류·비용·대량 유출 징후</td></tr>
+                <tr><td><code>source_ip_hash</code> 또는 제한된 IP</td><td>privacy-safe 값</td><td>abuse correlation</td></tr>
+                <tr><td><code>error_code</code></td><td>invalid_token, insufficient_scope</td><td>401/403/429 원인 분리</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout danger">
+            <p><strong>기록 금지:</strong> Authorization header, raw token, memory title/body/summary,
+              recall query 전문, DB URL, OAuth refresh token. 필요하면 query 길이와 stable hash만 기록합니다.</p>
+          </div>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4>request context와 audit event를 구현합니다 <span class="status build">구현 작업</span></h4>
+              <div class="where"><span><code>src/server/app.ts</code></span><span><code>src/remote/auth.ts</code></span><span><code>src/mcp/server.ts</code></span></div>
+              <div class="code-block">
+                <div class="code-head"><span>json / expected audit shape</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>{
+  "level": "info",
+  "event": "mcp_tool_call",
+  "request_id": "&lt;UUID&gt;",
+  "client_id": "claude-device-name",
+  "key_id": "&lt;PUBLIC_KEY_ID&gt;",
+  "tool": "capture_event",
+  "decision": "allow",
+  "status": 200,
+  "latency_ms": 83,
+  "result_bytes": 14210,
+  "source_ip_hash": "&lt;HMAC_VALUE&gt;"
+}</code></pre>
+              </div>
+            </div>
+
+            <div class="procedure">
+              <h4>경보 조건을 설정합니다</h4>
+              <div class="where"><span>Render Logs</span><span>선택한 alert sink</span></div>
+              <ul>
+                <li>같은 IP의 인증 실패 급증</li>
+                <li>같은 client의 비정상적인 <code>429</code> 증가</li>
+                <li>평소보다 큰 result volume 또는 recall 빈도</li>
+                <li>write tool 호출 실패 증가</li>
+                <li>DB permission error 또는 RLS deny</li>
+                <li>revoked key 재사용</li>
+                <li>5xx와 readiness 실패</li>
+              </ul>
+            </div>
+
+            <div class="procedure">
+              <h4>log retention과 접근자를 정합니다</h4>
+              <div class="where"><span>운영 문서</span><span>Render workspace</span></div>
+              <p>최소 30일을 시작점으로 삼되 민감 metadata와 비용을 함께 검토합니다. log 접근자는 운영자 최소 인원으로 제한하고,
+                export가 필요하면 암호화된 storage와 삭제 기한을 정합니다.</p>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p3-1" data-check><label for="c-p3-1"><strong>모든 MCP 요청에 request ID</strong><span>응답 header와 app log가 같은 ID를 사용합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p3-2" data-check><label for="c-p3-2"><strong>client·tool·decision 구조화 기록</strong><span>token과 memory content는 기록하지 않습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p3-3" data-check><label for="c-p3-3"><strong>경보 test 통과</strong><span>의도적으로 만든 staging 실패가 실제 alert를 발생시킵니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-4">
+          <span class="anchor-label">8 / Phase 4</span>
+          <div class="phase-head">
+            <div class="phase-number">P4</div>
+            <div>
+              <h2>Rate limit과 단계적 임시 IP 차단</h2>
+              <p class="section-lead">rate limit은 일정 시간 동안 허용하는 요청 수를 제한하는 장치입니다. brute force 성공 확률과 별개로 실패 인증을 계속 방치하지 않습니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>인증 실패 폭주, 비용 증가, DB pool 고갈, 서비스 장애를 줄이고 공격을 눈에 보이게 만듭니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd>IP별 unauth limit, client별 quota, write quota, global concurrency, 429 응답을 구현합니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>Render app middleware와 중앙 rate-limit store, 필요하면 Cloudflare WAF에서 작업합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>staging abuse test에서 기준 횟수 후 429·Retry-After가 나오고 정상 client는 영향이 없어야 합니다.</dd></div>
+          </dl>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>대상</th><th>초기값</th><th>동작</th><th>주의</th></tr></thead>
+              <tbody>
+                <tr><td>잘못된 인증 / 같은 IP</td><td>60초 동안 5회</td><td>15분 임시 차단, 429, Retry-After</td><td>NAT 공유 환경 false positive 관찰</td></tr>
+                <tr><td>반복 공격 / 같은 IP</td><td>1시간 동안 20회</td><td>24시간 임시 차단 + high alert</td><td>영구 자동 차단은 하지 않음</td></tr>
+                <tr><td>인증 성공 read / client</td><td>부하 측정 후 결정</td><td>client별 quota</td><td>recall 비용과 정상 burst 반영</td></tr>
+                <tr><td>인증 성공 write / client</td><td>read보다 낮게</td><td>별도 write quota</td><td>업무 자동화 peak 고려</td></tr>
+                <tr><td>전체 동시 요청</td><td>DB pool보다 작게</td><td>global concurrency cap</td><td>queue 무한 증가 금지</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warning">
+            <p><strong>IP만으로 client를 식별하지 마십시오.</strong> IP는 보조 신호입니다. 정상 사용자는 NAT, VPN,
+              이동통신망을 공유할 수 있습니다. 인증 성공 후의 주 제한 축은 <code>client_id/key_id</code>여야 합니다.</p>
+          </div>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4>중앙 store 기반 limiter를 구현합니다 <span class="status build">구현 작업</span></h4>
+              <div class="where"><span><code>src/server/</code></span><span>Render Key Value 또는 동등한 store</span></div>
+              <ol>
+                <li>여러 Render instance가 같은 counter를 보도록 중앙 store를 사용합니다.</li>
+                <li>auth 이전에는 privacy-safe IP key, auth 이후에는 client ID key를 사용합니다.</li>
+                <li>key 유효성 검사 전에 실패 횟수를 기록하되 token 값은 counter key에 넣지 않습니다.</li>
+                <li>차단은 자동 만료되는 TTL로 구현합니다.</li>
+                <li><code>429 Too Many Requests</code>와 <code>Retry-After</code>를 일관되게 반환합니다.</li>
+              </ol>
+            </div>
+
+            <div class="procedure">
+              <h4>Render proxy chain을 검증합니다</h4>
+              <div class="where"><span>Express config</span><span>Render request headers</span></div>
+              <p><code>trust proxy</code>를 무제한으로 켜고 임의 <code>X-Forwarded-For</code>를 믿으면 공격자가 IP를 바꿔
+                limiter를 우회할 수 있습니다. Render가 실제로 추가하는 proxy hop만 신뢰하도록 test fixture를 만듭니다.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>staging에서 실패 인증 test를 실행합니다</h4>
+              <div class="where"><span>staging endpoint</span><span>test IP</span><span>production 금지</span></div>
+              <div class="code-block">
+                <div class="code-head"><span>shell / controlled invalid-auth test</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>STAGING_URL="https://&lt;STAGING_SERVICE&gt;.onrender.com/mcp"
+for attempt in 1 2 3 4 5 6; do
+  curl --silent --output /dev/null \
+    --write-out "attempt=$attempt status=%{http_code}\n" \
+    --request POST \
+    --header "Authorization: Bearer invalid-test-token" \
+    --header "Content-Type: application/json" \
+    --data '{"jsonrpc":"2.0","id":1,"method":"ping"}' \
+    "$STAGING_URL"
+done</code></pre>
+              </div>
+              <p class="muted">기대 결과: 초기 요청은 401, 기준 초과 후 429. 응답에는 <code>Retry-After</code>가 있어야 합니다.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>Render의 기본 DDoS 보호와 app limiter를 구분합니다</h4>
+              <div class="where"><span>Render</span><span>Cloudflare 선택</span></div>
+              <p>Render의 Cloudflare 기반 volumetric DDoS 보호는 대규모 네트워크 공격을 줄여주지만
+                application의 invalid-token 횟수, client별 quota, write limit을 대신하지 않습니다.
+                custom domain과 자체 Cloudflare를 쓰면 edge에 coarse limit을 추가하되 app 검증은 항상 유지합니다.</p>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p4-1" data-check><label for="c-p4-1"><strong>unauth IP limiter 동작</strong><span>기준 초과 후 429와 Retry-After가 반환됩니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p4-2" data-check><label for="c-p4-2"><strong>client별 read/write quota 분리</strong><span>한 client의 제한이 다른 client에 전파되지 않습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p4-3" data-check><label for="c-p4-3"><strong>proxy spoof test 통과</strong><span>임의 X-Forwarded-For로 limiter를 우회할 수 없습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p4-4" data-check><label for="c-p4-4"><strong>차단 경보와 자동 만료 확인</strong><span>임시 차단이 기록되고 TTL 후 정상 해제됩니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-5">
+          <span class="anchor-label">9 / Phase 5</span>
+          <div class="phase-head">
+            <div class="phase-number">P5</div>
+            <div>
+              <h2>Supabase DB를 Render와 승인된 admin 경로로 제한</h2>
+              <p class="section-lead">Supabase Network Restrictions는 credential 검증 전에 허용 CIDR을 검사합니다. MCP의 HTTPS API가 아니라 Postgres와 pooler 접속에 적용됩니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>DB password가 유출돼도 허용되지 않은 네트워크에서 직접 접속하지 못하게 합니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd>Render egress CIDR과 긴급 admin CIDR만 Supabase allowlist에 넣습니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>Render service Connect/Networking 화면과 Supabase Network Restrictions에서 수행합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>Render MCP는 정상이고 허용하지 않은 로컬 네트워크의 direct DB 접속은 실패해야 합니다.</dd></div>
+          </dl>
+
+          <div class="callout warning">
+            <p><strong>Render shared outbound 범위:</strong> service는 해당 region의 여러 shared CIDR 중 어느 IP로든
+              egress할 수 있습니다. IP 하나만 allowlist에 넣으면 간헐적으로 끊길 수 있습니다. 정확히 전용 IP만
+              허용하려면 Render Dedicated Outbound IP 구성을 검토합니다.</p>
+          </div>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4>Render outbound 범위를 수집합니다</h4>
+              <div class="where"><span>Render Dashboard</span><span>ultimate-hermes-mcp</span><span>Connect</span></div>
+              <ol>
+                <li>Render Dashboard에서 <strong>ultimate-hermes-mcp</strong> service를 엽니다.</li>
+                <li><strong>Connect</strong> 또는 networking 정보에서 outbound IP/CIDR 목록을 찾습니다.</li>
+                <li>region이 Singapore인지 확인하고 표시된 모든 CIDR을 변경 기록에 복사합니다.</li>
+                <li>정확한 독점 egress가 필요하면 Pro workspace + Dedicated Outbound IP 비용을 검토합니다.</li>
+              </ol>
+            </div>
+
+            <div class="procedure">
+              <h4>긴급 admin 접속 경로를 먼저 준비합니다</h4>
+              <div class="where"><span>회사 VPN 또는 고정 IP</span><span>Supabase</span></div>
+              <p>Render만 허용하면 local migration과 사고 대응까지 막힐 수 있습니다. 고정된 VPN egress 또는
+                별도 보호 runner의 CIDR을 admin 경로로 정합니다. 이동형 home IP를 장기 allowlist로 쓰지 않습니다.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>Supabase Network Restrictions에 전체 CIDR을 한 번에 적용합니다 <span class="status production">운영 변경</span></h4>
+              <div class="where"><span>Supabase Dashboard</span><span>Project Settings</span><span>Database</span><span>Network Restrictions</span></div>
+              <ol>
+                <li>현재 restriction 목록을 export 또는 캡처합니다.</li>
+                <li>Render의 모든 outbound CIDR과 승인된 admin CIDR을 새 목록에 포함합니다.</li>
+                <li>IPv4와 IPv6를 실제 접속 방식에 맞게 모두 검토합니다.</li>
+                <li>저장합니다. CLI를 쓸 경우 update가 기존 목록을 교체할 수 있으므로 append 동작을 공식 문서에서 확인합니다.</li>
+                <li>즉시 Render health/read/write smoke를 실행합니다.</li>
+              </ol>
+              <div class="callout danger">
+                <p><strong>잠금 방지:</strong> 새 allowlist에는 기존에 필요한 admin CIDR도 포함해야 합니다.
+                  “Render CIDR 추가”가 아니라 “최종 전체 목록 교체”라고 생각하고 검토합니다.</p>
+              </div>
+            </div>
+
+            <div class="procedure">
+              <h4>positive와 negative test를 모두 수행합니다</h4>
+              <div class="where"><span>Render production</span><span>허용되지 않은 로컬 네트워크</span></div>
+              <ul>
+                <li>Positive: Render readiness, recent, recall, authorized capture가 성공합니다.</li>
+                <li>Negative: allowlist에 없는 local network에서 direct Postgres 연결이 network 단계에서 실패합니다.</li>
+                <li>HTTPS Supabase API에는 이 restriction이 적용되지 않는다는 점을 별도로 기록합니다.</li>
+                <li>MCP HTTPS endpoint는 계속 public 도달 가능하되 app auth가 보호합니다.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="verify-grid">
+            <div class="verify-card pass">
+              <h4>통과 기준</h4>
+              <ul>
+                <li>Render에서 DB read/write 정상</li>
+                <li>승인된 migration runner 정상</li>
+                <li>비허용 local direct DB 접속 실패</li>
+                <li>allowlist 최종 CIDR 문서화</li>
+              </ul>
+            </div>
+            <div class="verify-card rollback">
+              <h4>롤백</h4>
+              <ul>
+                <li>Supabase Dashboard에서 이전 전체 CIDR 목록 복원</li>
+                <li>무제한 공개는 최후의 임시 조치</li>
+                <li>복원 직후 DB credential 회전 여부 검토</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p5-1" data-check><label for="c-p5-1"><strong>Render 전체 outbound CIDR 확보</strong><span>단일 IP가 아니라 region의 전체 범위를 확인했습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p5-2" data-check><label for="c-p5-2"><strong>승인된 admin 경로 확보</strong><span>고정된 VPN 또는 보호 runner가 있습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p5-3" data-check><label for="c-p5-3"><strong>Network Restrictions 적용</strong><span>Render와 admin CIDR만 최종 목록에 있습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p5-4" data-check><label for="c-p5-4"><strong>positive/negative test 통과</strong><span>Render는 성공하고 비허용 direct DB 연결은 실패합니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-6">
+          <span class="anchor-label">10 / Phase 6</span>
+          <div class="phase-head">
+            <div class="phase-number">P6</div>
+            <div>
+              <h2>정기 백업과 실제 복구 훈련</h2>
+              <p class="section-lead">백업 화면에 성공 표시가 있는 것만으로는 부족합니다. 새 test project에 복구해 data와 application 동작을 확인해야 합니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>실수·침해·migration 오류에서 데이터를 되돌릴 수 있는지 증명합니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd>자동 backup, PITR, 암호화 export, offsite copy, 분기별 restore drill을 운영합니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>Supabase Backups, 보호된 backup runner, 암호화 object storage, test project에서 수행합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>정해진 RPO/RTO 안에 새 환경을 복구하고 row count·checksum·MCP smoke가 통과해야 합니다.</dd></div>
+          </dl>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>항목</th><th>권장 시작점</th><th>확인 내용</th></tr></thead>
+              <tbody>
+                <tr><td>RPO</td><td>최대 허용 데이터 손실 24시간 이하</td><td>업무 write 빈도에 따라 PITR 필요 여부 결정</td></tr>
+                <tr><td>RTO</td><td>복구 4시간 이하</td><td>새 project 생성, restore, secret rotation, smoke 포함</td></tr>
+                <tr><td>자동 backup</td><td>Supabase plan 보관 기간 확인</td><td>Pro 7일, Team 14일, Enterprise 최대 30일은 공식 문서의 현재 정책 재확인</td></tr>
+                <tr><td>PITR</td><td>write 중요도가 높으면 사용</td><td>별도 add-on과 최소 compute 요구 사항 확인</td></tr>
+                <tr><td>논리 export</td><td>주 1회 또는 변경 전</td><td>암호화, offsite, access log, 삭제 기한</td></tr>
+                <tr><td>복구 훈련</td><td>분기 1회 + 큰 migration 전</td><td>production이 아닌 새 test project에 restore</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout warning">
+            <p><strong>Supabase backup 주의:</strong> Storage object 본문은 DB backup에 포함되지 않고 metadata만 포함될 수 있습니다.
+              custom role password도 daily backup에서 복구되지 않을 수 있으므로 restore 후 <code>hermes_runtime</code>
+              password를 새로 설정하고 모든 DSN을 갱신하는 절차가 필요합니다.</p>
+          </div>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4>자동 backup과 PITR 설정을 기록합니다</h4>
+              <div class="where"><span>Supabase Dashboard</span><span>Database Backups</span></div>
+              <ol>
+                <li>plan, daily backup 보관 일수, 최근 성공 시각을 기록합니다.</li>
+                <li>PITR 활성 여부와 restore 가능한 가장 이른 시각을 기록합니다.</li>
+                <li>owner, 점검 주기, 실패 alert 수신자를 정합니다.</li>
+              </ol>
+            </div>
+
+            <div class="procedure">
+              <h4>논리 backup을 안전하게 export합니다 <span class="status secret">Secret</span></h4>
+              <div class="where"><span>보호된 backup runner</span><span><code>pg_dump</code></span><span>암호화 storage</span></div>
+              <p>아래는 실행 패턴입니다. production DSN을 file이나 shell history에 기록하지 않고 prompt로 읽습니다.
+                실제 Supabase connection string과 <code>pg_dump</code> 버전 호환성을 먼저 확인합니다.</p>
+              <div class="code-block">
+                <div class="code-head"><span>shell / encrypted logical backup pattern</span><button class="copy-button" type="button">복사</button></div>
+                <pre><code>umask 077
+BACKUP_DIR="$(mktemp -d /tmp/hermes-backup.XXXXXX)"
+BACKUP_FILE="$BACKUP_DIR/ultimate-hermes-$(date -u +%Y%m%dT%H%M%SZ).dump"
+
+IFS= read -r -s SUPABASE_BACKUP_URL
+export SUPABASE_BACKUP_URL
+printf '\n'
+
+pg_dump \
+  --dbname="$SUPABASE_BACKUP_URL" \
+  --format=custom \
+  --no-owner \
+  --file="$BACKUP_FILE"
+
+unset SUPABASE_BACKUP_URL
+shasum -a 256 "$BACKUP_FILE"</code></pre>
+              </div>
+              <p class="muted">생성한 dump를 승인된 암호화 storage로 전송하고 checksum과 retention metadata를 저장합니다.
+                repository나 일반 cloud drive에 평문으로 두지 않습니다.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>새 test project에 restore합니다</h4>
+              <div class="where"><span>새 Supabase test project</span><span>보호된 runner</span></div>
+              <ol>
+                <li>production과 분리된 test project를 만듭니다.</li>
+                <li>extension, schema, role 조건을 준비합니다.</li>
+                <li><code>pg_restore</code>로 dump를 복원합니다.</li>
+                <li>custom role password를 새로 설정합니다.</li>
+                <li>table별 row count와 핵심 checksum을 production snapshot과 비교합니다.</li>
+                <li>staging Render를 restored DB에 연결해 read와 append-only write smoke를 실행합니다.</li>
+              </ol>
+            </div>
+
+            <div class="procedure">
+              <h4>복구 결과를 한 장으로 기록합니다</h4>
+              <div class="where"><span>운영 runbook</span></div>
+              <p>backup ID, 시작·종료 시각, 복구된 timestamp, row count 차이, 실패 단계, 실제 RPO/RTO,
+                password rotation 여부, 승인자를 남깁니다. test project는 검증 후 retention 정책에 따라 제거합니다.</p>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p6-1" data-check><label for="c-p6-1"><strong>자동 backup·PITR 상태 기록</strong><span>보관 기간과 최근 성공 시각을 알고 있습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p6-2" data-check><label for="c-p6-2"><strong>암호화 offsite export 운영</strong><span>checksum, access control, retention이 있습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p6-3" data-check><label for="c-p6-3"><strong>test restore drill 통과</strong><span>row count·checksum·MCP read/write가 복구 환경에서 통과합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p6-4" data-check><label for="c-p6-4"><strong>RPO/RTO 실측</strong><span>목표가 아니라 실제 걸린 시간을 기록했습니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="phase-7">
+          <span class="anchor-label">11 / Phase 7</span>
+          <div class="phase-head">
+            <div class="phase-number">P7</div>
+            <div>
+              <h2>Marketplace용 OAuth 2.1 전환</h2>
+              <p class="section-lead">최종 사용자 경험은 repository 공개 여부와 secret 배포를 분리해야 합니다. plugin에는 URL과 metadata만 두고 설치 후 browser login으로 권한을 부여합니다.</p>
+            </div>
+          </div>
+
+          <dl class="purpose-grid">
+            <div class="purpose"><dt>왜</dt><dd>장기 API key 입력·복사·백업 유출을 줄이고 client별 grant를 중앙에서 폐기합니다.</dd></div>
+            <div class="purpose"><dt>무엇</dt><dd>MCP OAuth discovery, PKCE, short access token, audience 검증, refresh rotation을 구현합니다.</dd></div>
+            <div class="purpose"><dt>어디서</dt><dd>Supabase Auth OAuth 또는 다른 authorization server, Render resource server, marketplace plugin에서 작업합니다.</dd></div>
+            <div class="purpose"><dt>완료</dt><dd>새 기기에서 marketplace install → browser login → tools/list → read/write 정책 검증이 성공해야 합니다.</dd></div>
+          </dl>
+
+          <div class="callout warning">
+            <p><strong>2026-08-07 기준 확인 사항:</strong> Supabase OAuth 2.1은 standard scope만 제공하고
+              custom scope는 아직 지원하지 않습니다. 첫 버전은 access token의 <code>client_id</code>와
+              custom claim을 기준으로 permissions를 Hermes policy에서 적용할 수 있습니다.
+              엄격한 <code>memory:read</code>/<code>memory:write</code> OAuth scope가 필요하면 custom scope를 지원하는
+              authorization server를 검토합니다.</p>
+          </div>
+
+          <div class="step-list">
+            <div class="procedure">
+              <h4>OAuth compatibility spike를 별도 staging에서 수행합니다 <span class="status build">구현 작업</span></h4>
+              <div class="where"><span>staging Render</span><span>Supabase Auth</span><span>MCP client 3종</span></div>
+              <ul>
+                <li>Protected Resource Metadata endpoint를 제공합니다.</li>
+                <li>401 응답에 올바른 <code>WWW-Authenticate</code> metadata link를 넣습니다.</li>
+                <li>PKCE를 사용하고 client secret 없는 public client flow를 검증합니다.</li>
+                <li>access token의 signature, issuer, audience, expiry, not-before, subject, client ID를 검증합니다.</li>
+                <li>canonical MCP URL을 audience/resource로 고정합니다.</li>
+                <li>token passthrough를 금지합니다.</li>
+              </ul>
+            </div>
+
+            <div class="procedure">
+              <h4>Dynamic Client Registration은 기본 off로 시작합니다</h4>
+              <div class="where"><span>authorization server</span><span>marketplace onboarding</span></div>
+              <p>Codex, Claude Code, Hermes의 redirect URI와 first-use flow를 먼저 등록·검증합니다.
+                marketplace 신규 client에 꼭 필요할 때만 consent, redirect URI 검증, registration rate limit,
+                client inventory와 함께 dynamic registration을 켭니다.</p>
+            </div>
+
+            <div class="procedure">
+              <h4>per-device key를 fallback으로 유지한 채 점진 전환합니다</h4>
+              <div class="where"><span>feature flag</span><span>세 client</span></div>
+              <ol>
+                <li>OAuth auth path를 feature flag로 배포합니다.</li>
+                <li>Codex clean profile에서 login과 revoke를 검증합니다.</li>
+                <li>Claude Code 새 기기에서 marketplace install flow를 검증합니다.</li>
+                <li>Hermes에서 동일한 audience·expiry·revocation test를 수행합니다.</li>
+                <li>안정화 뒤 per-device key를 emergency/read-only fallback으로 축소하거나 폐기합니다.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-p7-1" data-check><label for="c-p7-1"><strong>MCP OAuth metadata·PKCE 검증</strong><span>공식 MCP Authorization 요구 사항을 충족합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p7-2" data-check><label for="c-p7-2"><strong>wrong audience·expired·revoked 거부</strong><span>각 경우 401이고 insufficient permission은 403입니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p7-3" data-check><label for="c-p7-3"><strong>clean-device 설치 3종 통과</strong><span>Codex, Claude Code, Hermes에서 browser login이 작동합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-p7-4" data-check><label for="c-p7-4"><strong>marketplace package에 secret 없음</strong><span>public repository여도 URL과 metadata만 포함합니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="cutover">
+          <span class="anchor-label">12 / Deployment and cutover</span>
+          <h2>배포 단위와 안전한 전환 절차</h2>
+          <p class="section-lead">
+            한 번에 전부 배포하지 않습니다. 각 pull request는 rollback 가능한 경계를 가져야 하며,
+            production 전환은 앞 단계의 증거를 확인한 뒤 진행합니다.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>PR</th><th>범위</th><th>필수 test</th><th>production gate</th></tr></thead>
+              <tbody>
+                <tr><td>PR 1</td><td>startup migration 제거, schema version check, runtime role migration</td><td>DB integration, DDL deny, MCP read/write</td><td>staging <code>current_user=hermes_runtime</code></td></tr>
+                <tr><td>PR 2</td><td>per-device key, identity, scope, sensitivity ceiling, dual-auth</td><td>401/403, revoke, ceiling bypass, raw key scan</td><td>세 client 개별 canary</td></tr>
+                <tr><td>PR 3</td><td>audit, alert, rate limit, headers, proxy trust</td><td>401/403/429, spoof, concurrency, log redaction</td><td>staging abuse test</td></tr>
+                <tr><td>운영 변경</td><td>Supabase network restriction, DB password rotation</td><td>Render positive + local negative DB test</td><td>admin rollback path 확인</td></tr>
+                <tr><td>PR 4</td><td>OAuth metadata, JWT validation, marketplace login</td><td>issuer/audience/expiry/revoke/PKCE</td><td>clean-device 3종 통과</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout">
+            <p><strong>Render deploy gate:</strong> <code>render.yaml</code>의 <code>autoDeployTrigger: commit</code>을
+              checks가 통과한 commit만 배포하는 방식으로 바꾸는 것을 권장합니다. migration은 forward-compatible하게
+              작성하고 old app과 new app이 짧게 공존해도 깨지지 않아야 합니다.</p>
+          </div>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-cut-1" data-check><label for="c-cut-1"><strong>각 PR에 독립 rollback 정의</strong><span>DB와 app을 어떤 순서로 되돌릴지 적었습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-cut-2" data-check><label for="c-cut-2"><strong>post-deploy canary 자동화</strong><span>unauth 401, authorized read/write, read-only write deny, ready를 검사합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-cut-3" data-check><label for="c-cut-3"><strong>checks 통과 전 자동 배포 방지</strong><span>CI 실패 commit은 production에 가지 않습니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="incident">
+          <span class="anchor-label">13 / Incident response</span>
+          <h2>사고 유형별 즉시 대응</h2>
+          <p class="section-lead">
+            정상 운영에서는 원격 쓰기를 유지합니다. 아래 kill switch는 침해 징후가 있는 사고 대응에만 사용하고,
+            원인과 무결성을 확인한 뒤 authorized write를 복구합니다.
+          </p>
+
+          <dl class="incident">
+            <dt>기기 key 유출</dt>
+            <dd>해당 key만 revoke → 재사용 alert 확인 → 그 key의 최초 이상 시각부터 tool·result volume 조사 → 새 key 발급 → 다른 client는 유지.</dd>
+            <dt>공유 legacy token 유출</dt>
+            <dd>dual-auth가 있으면 legacy token 즉시 폐기. 아직 전환 전이면 incident mode로 writes를 잠시 차단하고 token 회전·세 client 재설정·로그 조사.</dd>
+            <dt>DB runtime password 유출</dt>
+            <dd>Network Restrictions 확인 → runtime password 회전 → Render DSN 갱신 → 기존 session 종료 → DB audit와 row integrity 확인.</dd>
+            <dt>DB admin DSN 유출</dt>
+            <dd>admin password 즉시 회전 → role/schema/RLS 변경 이력 검사 → backup/PITR 지점 확보 → migration runner secret 갱신 → runtime과 분리 재확인.</dd>
+            <dt>비정상 write</dt>
+            <dd>해당 client revoke → 필요 시 <code>HERMES_ALLOW_REMOTE_WRITES=false</code> incident switch → 영향 event/source 식별 → 삭제보다 archive/보존 우선 → 무결성 확인 후 writes 복구.</dd>
+            <dt>대량 recall 의심</dt>
+            <dd>client revoke와 IP 임시 차단 → result volume과 민감도 범위 계산 → 관련 credential 회전 → 필요한 법적·개인 통지 판단.</dd>
+            <dt>배포 후 DB 장애</dt>
+            <dd>새 app rollback → 이전 CIDR 목록과 runtime DSN 확인 → schema version 불일치 분석 → 침해가 아니라면 authorized append 기능 유지.</dd>
+          </dl>
+
+          <div class="callout danger">
+            <p><strong>사고 때도 로그를 지우지 마십시오.</strong> service 복구 전에 request log, Render deploy event,
+              Supabase connection/audit 증거를 보존합니다. token과 memory content를 새 증거 파일에 복제하지는 않습니다.</p>
+          </div>
+        </section>
+
+        <section class="section" id="acceptance">
+          <span class="anchor-label">14 / Definition of done</span>
+          <h2>최종 완료 기준</h2>
+          <p class="section-lead">아래 항목을 모두 증거로 확인하면 보안 강화 1차 완료입니다.</p>
+
+          <div class="checklist">
+            <div class="check-item"><input type="checkbox" id="c-done-1" data-check><label for="c-done-1"><strong>shared static token 제거</strong><span>production auth 경로에서 단일 장기 공유 token을 받지 않습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-done-2" data-check><label for="c-done-2"><strong>client별 revoke·attribution</strong><span>Codex·Claude·Hermes를 독립적으로 식별하고 폐기합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-done-3" data-check><label for="c-done-3"><strong>read/write/sensitivity authorization</strong><span>scope와 ceiling 우회 test가 통과합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-done-4" data-check><label for="c-done-4"><strong>Render DB 최소 권한</strong><span>runtime에 admin·BYPASSRLS·migration credential이 없습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-done-5" data-check><label for="c-done-5"><strong>Rate limit·audit·alert 실증</strong><span>staging abuse test와 alert 수신을 확인했습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-done-6" data-check><label for="c-done-6"><strong>DB 네트워크 제한</strong><span>Render/admin 경로만 DB에 접속하고 외부 direct 연결은 실패합니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-done-7" data-check><label for="c-done-7"><strong>복구 훈련 완료</strong><span>실제 RPO/RTO와 restored MCP read/write 증거가 있습니다.</span></label></div>
+            <div class="check-item"><input type="checkbox" id="c-done-8" data-check><label for="c-done-8"><strong>clean-device onboarding 완료</strong><span>Marketplace/OAuth 또는 scoped key로 세 client가 새 환경에서 연결됩니다.</span></label></div>
+          </div>
+        </section>
+
+        <section class="section" id="reference">
+          <span class="anchor-label">15 / Official references</span>
+          <h2>공식 문서와 repository 근거</h2>
+          <p class="section-lead">운영 설정을 바꾸기 직전에 각 vendor 문서의 최신 제한과 plan 조건을 다시 확인합니다.</p>
+
+          <h3>공식 문서</h3>
+          <ul class="source-list">
+            <li><a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization" target="_blank" rel="noreferrer">MCP Authorization 2025-11-25</a></li>
+            <li><a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/security_best_practices" target="_blank" rel="noreferrer">MCP Security Best Practices</a></li>
+            <li><a href="https://supabase.com/docs/guides/auth/oauth-server/mcp-authentication" target="_blank" rel="noreferrer">Supabase OAuth MCP Authentication</a></li>
+            <li><a href="https://supabase.com/docs/guides/auth/oauth-server/oauth-flows" target="_blank" rel="noreferrer">Supabase OAuth Flows and Scope Limits</a></li>
+            <li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security" target="_blank" rel="noreferrer">Supabase Row Level Security</a></li>
+            <li><a href="https://supabase.com/docs/guides/platform/network-restrictions" target="_blank" rel="noreferrer">Supabase Network Restrictions</a></li>
+            <li><a href="https://supabase.com/docs/guides/platform/backups" target="_blank" rel="noreferrer">Supabase Database Backups</a></li>
+            <li><a href="https://render.com/docs/outbound-ip-addresses" target="_blank" rel="noreferrer">Render Outbound IP Addresses</a></li>
+            <li><a href="https://render.com/docs/dedicated-ips" target="_blank" rel="noreferrer">Render Dedicated IPs</a></li>
+            <li><a href="https://render.com/docs/ddos-protection" target="_blank" rel="noreferrer">Render DDoS Protection</a></li>
+            <li><a href="https://render.com/docs/inbound-ip-rules" target="_blank" rel="noreferrer">Render Inbound IP Rules</a></li>
+          </ul>
+
+          <h3>현재 repository 확인 위치</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>파일</th><th>확인 내용</th></tr></thead>
+              <tbody>
+                <tr><td><code>src/remote/auth.ts</code></td><td>Bearer parsing, constant-time token 비교, Host/Origin, writes guard</td></tr>
+                <tr><td><code>src/config/env.ts</code></td><td>단일 API token, DB URL, migration URL, remote writes config</td></tr>
+                <tr><td><code>src/server/app.ts</code></td><td>public health/ready, MCP guards, 2 MB JSON body, error log</td></tr>
+                <tr><td><code>src/server/index.ts</code></td><td>startup migration 호출</td></tr>
+                <tr><td><code>src/db/client.ts</code></td><td>runtime pool과 migration pool</td></tr>
+                <tr><td><code>src/remote/lifeArchive.ts</code></td><td>민감도 ceiling 없는 read query와 실제 table operation</td></tr>
+                <tr><td><code>src/mcp/server.ts</code></td><td>read tools와 append-only write tools 등록</td></tr>
+                <tr><td><code>render.yaml</code></td><td>Render plan, deploy trigger, remote writes true, secret env</td></tr>
+                <tr><td><code>src/db/migrations/0003_supabase_hardening.sql</code></td><td>RLS 활성화와 anon/authenticated revoke</td></tr>
+                <tr><td><code>.dockerignore</code></td><td><code>configs/</code> 누락 여부를 보안 작업에서 함께 수정</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout">
+            <p><strong>별도 즉시 조치:</strong> local <code>configs/client_secret_*.json</code>은 repository tree 밖의
+              mode-600 credential store 또는 Keychain으로 옮기고 <code>.dockerignore</code>에 <code>configs/</code>를
+              추가합니다. local Docker build cache에 들어갔을 가능성이 불확실하면 Google OAuth client secret을 회전합니다.</p>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p><strong>문서 원칙:</strong> 기능을 끄는 대신 identity, 최소 권한, 관측, 제한, 복구를 겹쳐 적용합니다.</p>
+        <p>이 문서의 checkbox 상태는 현재 browser의 localStorage에만 저장되며 서버로 전송되지 않습니다.</p>
+      </footer>
+    </article>
+  </div>
+
+  <script>
+    (function () {
+      var storageKey = "ultimate-hermes-security-manual-v1";
+      var checks = Array.from(document.querySelectorAll("[data-check]"));
+      var progressText = document.getElementById("progress-text");
+      var progressBar = document.getElementById("progress-bar");
+      var sidebar = document.getElementById("sidebar");
+      var menuButton = document.getElementById("menu-button");
+
+      function loadState() {
+        try {
+          return JSON.parse(localStorage.getItem(storageKey) || "{}");
+        } catch (error) {
+          return {};
+        }
+      }
+
+      function updateProgress() {
+        var complete = checks.filter(function (item) { return item.checked; }).length;
+        var total = checks.length;
+        progressText.textContent = complete + " / " + total;
+        progressBar.style.width = (total ? complete / total * 100 : 0) + "%";
+      }
+
+      function saveState() {
+        var state = {};
+        checks.forEach(function (item) { state[item.id] = item.checked; });
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(state));
+        } catch (error) {
+          return;
+        }
+        updateProgress();
+      }
+
+      var saved = loadState();
+      checks.forEach(function (item) {
+        item.checked = Boolean(saved[item.id]);
+        item.addEventListener("change", saveState);
+      });
+      updateProgress();
+
+      document.querySelectorAll(".copy-button").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          var code = button.closest(".code-block").querySelector("pre").innerText;
+          try {
+            await navigator.clipboard.writeText(code);
+            var previous = button.textContent;
+            button.textContent = "복사됨";
+            window.setTimeout(function () { button.textContent = previous; }, 1400);
+          } catch (error) {
+            button.textContent = "복사 실패";
+          }
+        });
+      });
+
+      document.getElementById("print-button").addEventListener("click", function () {
+        window.print();
+      });
+
+      document.getElementById("reset-button").addEventListener("click", function () {
+        if (!window.confirm("이 브라우저에 저장된 체크 상태를 모두 초기화할까요?")) return;
+        checks.forEach(function (item) { item.checked = false; });
+        saveState();
+      });
+
+      menuButton.addEventListener("click", function () {
+        var open = sidebar.classList.toggle("open");
+        menuButton.setAttribute("aria-expanded", String(open));
+      });
+
+      sidebar.querySelectorAll("a").forEach(function (link) {
+        link.addEventListener("click", function () {
+          sidebar.classList.remove("open");
+          menuButton.setAttribute("aria-expanded", "false");
+        });
+      });
+
+      var tocLinks = Array.from(document.querySelectorAll(".toc a"));
+      var sections = tocLinks.map(function (link) {
+        return document.querySelector(link.getAttribute("href"));
+      }).filter(Boolean);
+
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          tocLinks.forEach(function (link) {
+            link.classList.toggle("active", link.getAttribute("href") === "#" + entry.target.id);
+          });
+        });
+      }, { rootMargin: "-18% 0px -72% 0px", threshold: 0 });
+
+      sections.forEach(function (section) { observer.observe(section); });
+    }());
+  </script>
+
+  <!-- FALLBACK: Pretext is loaded from CDN; normal CSS layout remains usable if unavailable. -->
+  <script type="module">
+    try {
+      const pretext = await import("https://esm.sh/@chenglou/pretext");
+      await document.fonts.ready;
+      const elements = Array.from(document.querySelectorAll("[data-pretext]"));
+      const prepared = new Map();
+
+      function prepareAll() {
+        elements.forEach(function (element) {
+          var style = getComputedStyle(element);
+          prepared.set(element, pretext.prepare(element.textContent, style.font));
+        });
+      }
+
+      function relayout() {
+        elements.forEach(function (element) {
+          var style = getComputedStyle(element);
+          var lineHeight = parseFloat(style.lineHeight);
+          if (!Number.isFinite(lineHeight)) lineHeight = parseFloat(style.fontSize) * 1.3;
+          var result = pretext.layout(prepared.get(element), element.clientWidth, lineHeight);
+          element.style.minHeight = Math.ceil(result.height) + "px";
+        });
+      }
+
+      prepareAll();
+      relayout();
+      new ResizeObserver(relayout).observe(document.querySelector(".document"));
+    } catch (error) {
+      document.documentElement.dataset.pretext = "unavailable";
+    }
+  </script>
+</body>
+</html>

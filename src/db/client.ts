@@ -3,13 +3,15 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { loadConfig } from "../config/env.js";
+import { loadConfig, loadMigrationDatabaseUrl } from "../config/env.js";
 
 const { Pool } = pg;
 
 export type Db = pg.Pool;
 
 let pool: pg.Pool | undefined;
+
+export const requiredSchemaMigration = "0005_runtime_role_hardening.sql";
 
 export function getDb(): Db {
   if (!pool) {
@@ -54,6 +56,18 @@ export async function withTransaction<T>(fn: (client: pg.PoolClient) => Promise<
   }
 }
 
+export async function assertSchemaReady(): Promise<void> {
+  const result = await query<{ ready: boolean }>(
+    "select exists (select 1 from public.schema_migrations where id = $1) as ready",
+    [requiredSchemaMigration]
+  );
+  if (!result.rows[0]?.ready) {
+    throw new Error(
+      `Database schema is not ready. Apply migrations through ${requiredSchemaMigration} with the migration-only credential.`
+    );
+  }
+}
+
 function migrationsDir(): string {
   const current = path.dirname(fileURLToPath(import.meta.url));
   const distPath = path.join(current, "migrations");
@@ -64,7 +78,7 @@ function migrationsDir(): string {
 export async function migrate(): Promise<string[]> {
   const config = loadConfig();
   const migrationPool = new Pool({
-    connectionString: config.migrationDatabaseUrl,
+    connectionString: loadMigrationDatabaseUrl(),
     max: 1,
     connectionTimeoutMillis: config.databaseConnectionTimeoutMs,
     idleTimeoutMillis: config.databaseIdleTimeoutMs,
