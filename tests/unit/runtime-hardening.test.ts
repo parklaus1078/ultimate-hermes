@@ -10,6 +10,20 @@ afterEach(() => {
 });
 
 describe.sequential("runtime database hardening", () => {
+  it("rejects the legacy shared token unless bootstrap mode is explicitly enabled", () => {
+    delete process.env.HERMES_ACCEPT_LEGACY_API_TOKEN;
+    expect(loadConfig().acceptLegacyApiToken).toBe(false);
+
+    process.env.HERMES_ACCEPT_LEGACY_API_TOKEN = "true";
+    expect(loadConfig().acceptLegacyApiToken).toBe(true);
+  });
+
+  it("keeps the legacy-token rollout switch deployment-specific in the public Blueprint", async () => {
+    const blueprint = await readFile(new URL("../../render.yaml", import.meta.url), "utf8");
+    expect(blueprint).toMatch(/HERMES_ACCEPT_LEGACY_API_TOKEN\n\s+sync: false/);
+    expect(blueprint).not.toMatch(/HERMES_ACCEPT_LEGACY_API_TOKEN\n\s+value: ["']?true/);
+  });
+
   it("prefers the isolated runtime DSN during a reversible credential rollout", () => {
     process.env.HERMES_DATABASE_URL = "postgres://migration-owner.example/postgres";
     process.env.HERMES_RUNTIME_DATABASE_URL = "postgres://hermes-runtime.example/postgres";

@@ -22,7 +22,7 @@ import {
 import { auditAuthenticatedRequest } from "../remote/request-audit.js";
 import { captureEvent, contextPack, recallEvents, recentEvents, timeline } from "../remote/tools.js";
 
-const version = "0.3.1";
+const version = "0.3.2";
 
 const enrollmentSchema = z.object({
   deviceName: z.string().trim().min(1).max(100),

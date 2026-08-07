@@ -192,12 +192,15 @@ printf '%s' "$HERMES_API_TOKEN" | pbcopy
 README 상단의 **Deploy to Render** button을 누르거나 Render에서 이 repository의
 `render.yaml`을 Blueprint로 import합니다.
 
-Render가 묻는 두 secret을 입력합니다.
+Render가 묻는 두 secret과 bootstrap switch를 입력합니다. 공개 Blueprint에서는 이
+switch를 `sync: false`로 두므로 기존 서비스의 운영값을 repository sync가 덮어쓰지
+않습니다.
 
 | Render variable | 값 |
 | --- | --- |
 | `HERMES_RUNTIME_DATABASE_URL` | `hermes_runtime` Supabase session-pooler URL |
 | `HERMES_API_TOKEN` | 최초 client 등록용 64자리 bootstrap token |
+| `HERMES_ACCEPT_LEGACY_API_TOKEN` | 최초 bootstrap 동안만 `true`; manager 확인 후 `false` |
 
 Blueprint의 기본 동작은 다음과 같습니다.
 
@@ -223,7 +226,7 @@ PORT=<platform assigned port>
 NODE_ENV=production
 HERMES_RUNTIME_DATABASE_URL=<hermes_runtime Supabase session-pooler URL>
 HERMES_API_TOKEN=<bootstrap admin secret>
-HERMES_ACCEPT_LEGACY_API_TOKEN=true
+HERMES_ACCEPT_LEGACY_API_TOKEN=true # initial bootstrap only
 ```
 
 Netlify Functions는 이 버전의 기본 target이 아닙니다. persistent Express process와
@@ -519,7 +522,8 @@ Streamable HTTP `POST`를 지원해야 합니다. 구형 HTTP+SSE 전용 client�
 - indexed key ID로 후보를 찾은 뒤 고정 크기 hash를 constant-time 비교합니다.
 - 등록 token은 5~60분만 유효하고 한 번 사용한 뒤 같은 key/hash의 안전한 retry 외에는 재사용할 수 없습니다.
 - client별 revoke, last-seen, request/tool attribution을 제공합니다.
-- 전환용 `HERMES_API_TOKEN`은 `HERMES_ACCEPT_LEGACY_API_TOKEN=false`로 차단할 수 있습니다.
+- 전환용 `HERMES_API_TOKEN`은 기본적으로 거부되며, 최초 bootstrap에서만
+  `HERMES_ACCEPT_LEGACY_API_TOKEN=true`로 명시적으로 허용합니다.
 - browser `Origin`은 allowlist에 없으면 `403`입니다.
 - Host header도 Render hostname 또는 명시적 allowlist와 일치해야 합니다.
 - Supabase의 `anon`, `authenticated` role은 application table 권한이 revoke됩니다.

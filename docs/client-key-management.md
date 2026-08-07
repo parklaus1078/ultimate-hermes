@@ -17,6 +17,11 @@ key가 아니라 SHA-256 hash만 저장되고, 모든 인증 요청은 client ID
 6. 나머지 기기·Agent를 각각 등록합니다.
 7. `HERMES_ACCEPT_LEGACY_API_TOKEN=false`로 바꾸고 redeploy합니다.
 
+공개 `render.yaml`은 이 값을 `sync: false`로 선언합니다. Render는 기존 Blueprint를
+갱신할 때 `sync: false` 변수를 무시하므로 repository sync가 운영값을 다시 `true`로
+되돌리지 않습니다. 최초 Blueprint 생성 시에만 `true`를 입력하고, manager 확인 후
+Render Dashboard에서 `false`로 바꿉니다. 애플리케이션의 미설정 기본값도 `false`입니다.
+
 DB migration은 DDL 권한이 있는 `HERMES_MIGRATION_DATABASE_URL`로만 실행합니다. Render에는
 기존의 제한된 `hermes_runtime` DSN만 유지합니다.
 

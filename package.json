@@ -1,6 +1,6 @@
 {
   "name": "ultimate-hermes",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "description": "Shared Supabase memory and remote MCP service for Hermes, Codex, and Claude",
