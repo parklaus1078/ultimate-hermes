@@ -98,12 +98,13 @@ merge한 뒤 진행합니다. Render Deploy button은 GitHub에 있는 코드를
 3. Supabase dashboard의 **Connect**에서 migration용 관리자 connection string을 복사합니다.
 4. persistent container에는 별도 `hermes_runtime` 역할의 **Session pooler** port `5432`
    URL을 사용합니다.
-5. URL 끝에 `sslmode=require`가 없다면 추가합니다.
+5. Render runtime URL에는 `sslmode=verify-full`과 이미지에 포함된 Supabase CA 경로를
+   추가합니다.
 
 형식은 대략 다음과 같습니다. 예시를 그대로 사용하면 안 됩니다.
 
 ```text
-postgresql://hermes_runtime.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=require
+postgresql://hermes_runtime.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres?sslmode=verify-full&sslrootcert=/app/certs/prod-ca-2021.crt
 ```
 
 Dashboard가 출력한 URL을 그대로 사용하는 편이 안전합니다. 비밀번호의 특수문자를
@@ -570,7 +571,7 @@ encrypted `pg_dump`를 만들고 DB password와 다른 위치에 보관합니다
 ### `/api/v1/ready`가 실패함
 
 - `HERMES_RUNTIME_DATABASE_URL`이 session-pooler port `5432`인지 확인합니다.
-- URL에 `sslmode=require`가 있는지 확인합니다.
+- URL에 `sslmode=verify-full&sslrootcert=/app/certs/prod-ca-2021.crt`가 있는지 확인합니다.
 - Supabase password와 project reference를 다시 확인합니다.
 - `npm run db:migrate`로 `0005_runtime_role_hardening.sql`까지 적용했는지 확인합니다.
 - Render의 `HERMES_RUNTIME_DATABASE_URL`에는 `hermes_runtime` URL만 설정하고, 검증 후
