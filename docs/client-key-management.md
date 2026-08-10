@@ -27,49 +27,60 @@ DB migration은 DDL 권한이 있는 `HERMES_MIGRATION_DATABASE_URL`로만 실�
 
 ## 최초 manager client 만들기
 
+repository가 있는 관리 컴퓨터에서 연결할 Agent 하나만 지정합니다.
+
 ```bash
 export ULTIMATE_HERMES_URL="https://ultimate-hermes-mcp.onrender.com"
-printf 'Bootstrap token: '
-IFS= read -r -s ULTIMATE_HERMES_ADMIN_TOKEN
-printf '\n'
-export ULTIMATE_HERMES_ADMIN_TOKEN
-
-npm run clients -- create --device "admin-mac" --agent codex --admin
+npm run connect -- codex
 ```
 
-출력된 command는 target인 `admin-mac`에서 실행합니다. 완료 후 bootstrap token을 현재
-shell에서 제거합니다.
+manager key가 아직 없으면 CLI가 `Admin token:`을 묻습니다. Render Dashboard의 service
+**Environment → `HERMES_API_TOKEN` → Reveal/Copy**에서 복사한 값을 붙여 넣습니다. 입력은
+숨겨지고 저장되지 않습니다. 활성 manager가 하나도 없으면 이 첫 client에 관리 권한을
+자동 부여하며, key 생성·Agent 설정·MCP 검증까지 같은 명령 안에서 끝납니다.
+
+이 bootstrap 입력은 `HERMES_ACCEPT_LEGACY_API_TOKEN=true`인 최초 전환 기간에만 동작합니다.
+이미 다른 컴퓨터에 manager가 있고 legacy token을 차단했다면 그 manager 컴퓨터에서 아래
+`npm run pair`를 사용합니다.
 
 ```bash
-unset ULTIMATE_HERMES_ADMIN_TOKEN
-npm run clients -- list --auth-agent codex
+npm run clients -- list
 ```
 
-`--auth-agent codex`는 `~/.codex/config.toml`의 Ultimate Hermes key를 읽되 출력하지
-않습니다. Claude는 `--auth-agent claude`, Hermes는 `--auth-agent hermes`를 사용합니다.
-`--auth-agent`를 명시하면 shell에 남아 있는 일반 `MCP_ULTIMATE_HERMES_API_KEY`보다
-선택한 Agent 설정의 key를 우선합니다. 일회성 명시적 관리자 override가 필요할 때만
-`ULTIMATE_HERMES_ADMIN_TOKEN`을 사용합니다.
+CLI는 `~/.codex/config.toml`, `~/.claude.json`, `~/.hermes/.env` 순서로 manager key를
+찾되 출력하지 않습니다. 특정 Agent를 강제로 선택할 때만 `--auth-agent codex`,
+`--auth-agent claude`, `--auth-agent hermes`를 사용합니다. 일회성 명시적 override가
+필요할 때만 `ULTIMATE_HERMES_ADMIN_TOKEN` 환경 변수를 사용합니다.
 
 ## 일반 client 추가
 
-각 명령은 등록 코드가 포함된 installer 한 줄을 출력합니다.
+같은 컴퓨터의 다른 Agent는 key를 직접 다루지 않고 바로 연결합니다.
 
 ```bash
-npm run clients -- create --auth-agent codex --device "office-mac" --agent codex
-npm run clients -- create --auth-agent codex --device "office-mac" --agent claude
-npm run clients -- create --auth-agent codex --device "home-linux" --agent hermes
+npm run connect -- claude
+npm run connect -- hermes
 ```
 
-명령을 잘못된 채널에 보냈다면 사용하지 말고 만료를 기다리거나 새 명령을 만듭니다.
-등록 코드는 기본 10분, `--expires 5`부터 `--expires 60`까지 설정할 수 있습니다.
+다른 컴퓨터에는 manager 컴퓨터에서 pairing 명령을 만듭니다.
+
+```bash
+npm run pair -- codex --device "office-mac"
+npm run pair -- hermes --device "home-linux"
+```
+
+출력된 installer 한 줄만 대상 컴퓨터에서 실행합니다. 명령을 잘못된 채널에 보냈다면
+사용하지 말고 만료를 기다리거나 새 명령을 만듭니다. 등록 코드는 기본 10분,
+`--expires 5`부터 `--expires 60`까지 설정할 수 있습니다.
+
+`pair`는 최초 manager 권한을 자동 부여하지 않습니다. 추가 관리 컴퓨터가 필요한 경우에만
+대상을 확인한 뒤 `--admin`을 명시합니다.
 
 ## 조회와 사고 대응
 
 ```bash
-npm run clients -- list --auth-agent codex
-npm run clients -- logs --auth-agent codex --limit 100
-npm run clients -- revoke mcpcli_xxxxx --auth-agent codex
+npm run clients -- list
+npm run clients -- logs --limit 100
+npm run clients -- revoke mcpcli_xxxxx
 ```
 
 분실한 기기는 해당 client 하나만 revoke합니다. 다른 기기와 Agent key는 바꿀 필요가

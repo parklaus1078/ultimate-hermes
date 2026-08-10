@@ -29,6 +29,7 @@ export type EnrollmentRequest = {
   deviceName: string;
   agentType: AgentType;
   canManageClients: boolean;
+  grantIfNoManager: boolean;
   expiresAt: Date;
   createdByClientId: string | null;
 };
@@ -111,23 +112,45 @@ export class McpClientRepository {
     );
   }
 
-  async createEnrollment(input: EnrollmentRequest): Promise<void> {
-    await query(
-      `insert into mcp_enrollment_tokens (
-         id, token_hash, label, device_name, agent_type, can_manage_clients,
-         expires_at, created_by_client_id
-       ) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        input.id,
-        input.tokenHash,
-        input.label,
-        input.deviceName,
-        input.agentType,
-        input.canManageClients,
-        input.expiresAt,
-        input.createdByClientId
-      ]
-    );
+  async createEnrollment(input: EnrollmentRequest): Promise<boolean> {
+    return withTransaction(async (client) => {
+      let canManageClients = input.canManageClients;
+      if (input.grantIfNoManager && !canManageClients) {
+        await client.query("select pg_advisory_xact_lock(hashtext($1))", ["ultimate-hermes:first-manager"]);
+        const existing = await client.query<{ manager_exists: boolean }>(
+          `select exists (
+             select 1
+               from mcp_clients
+              where status = 'active' and can_manage_clients = true
+             union all
+             select 1
+               from mcp_enrollment_tokens
+              where can_manage_clients = true
+                and used_client_id is null
+                and expires_at > now()
+           ) as manager_exists`
+        );
+        canManageClients = !existing.rows[0]?.manager_exists;
+      }
+
+      await client.query(
+        `insert into mcp_enrollment_tokens (
+           id, token_hash, label, device_name, agent_type, can_manage_clients,
+           expires_at, created_by_client_id
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          input.id,
+          input.tokenHash,
+          input.label,
+          input.deviceName,
+          input.agentType,
+          canManageClients,
+          input.expiresAt,
+          input.createdByClientId
+        ]
+      );
+      return canManageClients;
+    });
   }
 
   async exchangeEnrollment(input: {

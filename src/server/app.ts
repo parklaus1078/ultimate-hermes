@@ -32,7 +32,8 @@ const enrollmentSchema = z.object({
   agentType: z.enum(["codex", "claude", "hermes"]),
   label: z.string().trim().min(1).max(100).optional(),
   expiresInMinutes: z.number().int().min(5).max(60).default(10),
-  canManageClients: z.boolean().default(false)
+  canManageClients: z.boolean().default(false),
+  grantIfNoManager: z.boolean().default(false)
 });
 
 const exchangeSchema = z.object({
@@ -159,13 +160,14 @@ export function createApp() {
       const credential = createEnrollmentCredential();
       const expiresAt = new Date(Date.now() + input.expiresInMinutes * 60_000);
       const label = input.label ?? `${input.deviceName}-${input.agentType}`;
-      await new McpClientRepository().createEnrollment({
+      const canManageClients = await new McpClientRepository().createEnrollment({
         id: credential.id,
         tokenHash: credential.hash,
         label,
         deviceName: input.deviceName,
         agentType: input.agentType,
         canManageClients: input.canManageClients,
+        grantIfNoManager: input.grantIfNoManager,
         expiresAt,
         createdByClientId: actor.id
       });
@@ -176,6 +178,8 @@ export function createApp() {
           deviceName: input.deviceName,
           agentType: input.agentType,
           expiresAt,
+          canManageClients,
+          code: credential.value,
           installCommand: buildInstallCommand({
             baseUrl: config.publicBaseUrl,
             enrollmentToken: credential.value,
