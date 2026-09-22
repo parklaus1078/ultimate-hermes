@@ -271,42 +271,56 @@ curl -fsS "$ULTIMATE_HERMES_MCP_URL" \
 https://YOUR-SERVICE.onrender.com/mcp
 ```
 
-### 1. 새 client용 원클릭 명령 만들기
+### 가장 쉬운 방법: 현재 컴퓨터에 연결
 
-관리 PC의 repository에서 bootstrap token 또는 `canManageClients` 권한이 있는 client key를
-환경 변수로 읽은 뒤 명령 하나를 만듭니다. token은 출력되지 않고, 결과에는 10분 뒤
-만료되며 한 번만 쓸 수 있는 등록 코드만 들어갑니다.
+연결할 Agent 이름 하나만 지정합니다. 기기명은 자동으로 인식합니다.
 
 ```bash
-printf 'Ultimate Hermes admin token: '
-IFS= read -r -s ULTIMATE_HERMES_ADMIN_TOKEN
-printf '\n'
-export ULTIMATE_HERMES_ADMIN_TOKEN
-
-npm run clients -- create --device "kay-macbook" --agent codex
-npm run clients -- create --device "kay-macbook" --agent claude
-npm run clients -- create --device "home-server" --agent hermes
+npm run connect -- codex
+npm run connect -- claude
+npm run connect -- hermes
 ```
 
-이미 관리자 client가 설치된 장비에서는 환경 변수를 만들지 않고 해당 Agent 설정에서
-key를 안전하게 읽을 수도 있습니다.
+이미 설치된 manager key가 있으면 Codex, Claude, Hermes 설정에서 자동으로 찾아 사용합니다.
+서비스의 최초 manager를 만드는 경우에는 다음 안내가 한 번 표시됩니다.
+
+```text
+Admin token:
+```
+
+Render Dashboard의 해당 service에서 **Environment → `HERMES_API_TOKEN` → Reveal/Copy**로
+값을 복사해 붙여 넣습니다. 입력은 화면에 표시되지 않고 저장되지도 않습니다. 활성 manager
+client가 아직 하나도 없으면 첫 client에만 관리 권한을 자동 부여합니다. 이후 연결부터는
+token을 다시 입력하지 않습니다.
+
+이미 다른 컴퓨터에 manager가 있고 `HERMES_ACCEPT_LEGACY_API_TOKEN=false`라면 bootstrap
+token을 다시 사용하지 말고 아래 `pair` 명령을 manager 컴퓨터에서 실행합니다.
+
+명령은 기존 연결을 먼저 검사하므로 정상 연결된 Agent의 key를 중복 생성하지 않습니다.
+key 교체는 기존 client를 `npm run clients -- revoke CLIENT_ID`로 폐기한 뒤 `connect`를
+다시 실행합니다. 설정만 덮어써서 이전 key를 활성 상태로 남기는 동작은 지원하지 않습니다.
+
+기본 배포 URL이 아닌 서버는 `--server https://YOUR-SERVICE.onrender.com`을 덧붙입니다.
+
+### 다른 컴퓨터에 연결
+
+manager client가 연결된 컴퓨터에서 다음 명령을 실행합니다.
 
 ```bash
-npm run clients -- create --auth-agent codex --device "new-mac" --agent claude
+npm run pair -- codex --device "new-mac"
+npm run pair -- claude --device "office-mac"
+npm run pair -- hermes --device "home-server"
 ```
 
-최초 trusted 관리 장비를 등록할 때만 `--admin`을 추가합니다. 일반 Agent key에는 관리
-권한을 주지 않습니다.
+Codex, Claude, Hermes 설정에서 manager key를 자동으로 찾고, 10분 동안 한 번만 사용할 수
+있는 설치 명령 한 줄을 출력합니다. 그 한 줄만 대상 컴퓨터 Terminal에서 실행합니다.
+client key 자체를 복사하거나 확인할 필요는 없습니다.
 
-```bash
-npm run clients -- create --device "admin-mac" --agent codex --admin
-```
+`pair`는 원격 client에 관리 권한을 자동 부여하지 않습니다. 신뢰된 추가 관리 컴퓨터를
+의도적으로 만들 때만 `npm run pair -- codex --device "admin-mac" --admin`을 사용합니다.
 
-### 2. 대상 기기에서 명령 한 줄 실행
-
-출력된 한 줄을 새 기기 Terminal에서 그대로 실행합니다. 설치기는 대상 기기에서
-256-bit random API key를 만들고 SHA-256 hash만 서버에 등록합니다. 원문 key는 서버의
-client table이나 등록 요청 body에 저장되지 않습니다.
+설치기는 대상 기기에서 256-bit random API key를 만들고 SHA-256 hash만 서버에 등록합니다.
+원문 key는 서버의 client table이나 등록 요청 body에 저장되지 않습니다.
 
 - Codex: `~/.codex/config.toml`의 `ultimate-hermes` HTTP header를 mode `600` 파일에 저장
 - Claude Code: user scope `~/.claude.json`에 HTTP header를 저장
@@ -317,20 +331,23 @@ client table이나 등록 요청 body에 저장되지 않습니다.
 원문 API key는 설치기 출력에 표시되지 않습니다. `curl | runtime` 실행 전 내용을
 검사하려면 installer URL을 먼저 파일로 내려받아 확인한 뒤 실행합니다.
 
-### 3. client와 로그 관리
+### client와 로그 관리
 
 ```bash
-npm run clients -- list --auth-agent codex
-npm run clients -- logs --auth-agent codex --limit 50
-npm run clients -- revoke CLIENT_ID --auth-agent codex
+npm run clients -- list
+npm run clients -- logs --limit 50
+npm run clients -- revoke CLIENT_ID
 ```
+
+관리 명령도 설치된 manager key를 자동 탐색합니다. 특정 Agent의 key만 사용하려면 고급
+옵션 `--auth-agent codex|claude|hermes`를 지정할 수 있습니다.
 
 로그에는 client ID/label, 기기명에 연결된 Agent 종류, MCP method/tool, status, latency,
 request ID, best-effort source IP, user-agent가 기록됩니다. Authorization header와 request
 body는 기록하지 않습니다. 응답의 `X-Hermes-Request-Id`로 Render log와 DB audit row를
 연결할 수 있습니다.
 
-### 4. 공유 bootstrap token 차단
+### 공유 bootstrap token 차단
 
 관리 key로 `create`, `list`, `logs`, `revoke`가 모두 되는 것을 확인한 뒤 Render에서
 다음 값을 바꾸고 redeploy합니다.
@@ -664,7 +681,7 @@ Migration rehearsal 절차와 검증 기준은
 | `scripts/migrate_local_db_to_supabase.sh` | exact local-to-cloud migration |
 | `scripts/configure_hermes_remote_mcp.py` | secret-safe Hermes MCP setup |
 | `scripts/install_mcp_client.{mjs,py}` | local key generation + one-command client enrollment |
-| `scripts/manage_mcp_clients.mjs` | enrollment/list/log/revoke operator CLI |
+| `scripts/manage_mcp_clients.mjs` | connect/pair와 client 관리 CLI |
 | `examples/mcp/` | Codex, Claude, Hermes templates |
 | `docs/client-key-management.md` | per-device/Agent key 운영과 배포 runbook |
 | `docs/ultimate-hermes-security-hardening-manual.html` | Render/Supabase/MCP 보안 강화 실행 매뉴얼 |

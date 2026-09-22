@@ -23,6 +23,8 @@
     "db:migrate": "npm run build && node dist/src/cli/index.js migrate",
     "db:migrate:supabase": "scripts/migrate_local_db_to_supabase.sh",
     "setup:check": "npm run build && node dist/src/cli/index.js setup check",
+    "connect": "node scripts/manage_mcp_clients.mjs connect",
+    "pair": "node scripts/manage_mcp_clients.mjs pair",
     "clients": "node scripts/manage_mcp_clients.mjs",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
