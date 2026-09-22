@@ -359,6 +359,12 @@ curl -fsS -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
 마지막으로 ChatGPT에서 `memory_status` 또는 `recent_events`를 실행하고, Codex에서도 Life
 Archive의 최근 memory 조회를 요청합니다.
 
+ChatGPT에서 계정 연결이 완료된 뒤에는 새 대화를 열고 입력창의 **+ → More → Developer mode**에서
+**Life Archive**를 대화의 도구로 선택합니다. `최근 기억 보여줘`처럼 읽기 요청을 보내고, 도구
+호출 확인창이 나오면 내용과 권한을 확인한 뒤 승인합니다. 이 단계는 계정 연결이 성공한 다음에만
+가능합니다. 계정 추가 화면에서 `Cannot add this account`가 뜬다면 대화 선택 문제가 아니므로
+11단계의 OAuth/MCP 점검을 먼저 진행합니다.
+
 ## 11. 자주 생기는 문제
 
 ### Auth0 로그인은 성공했는데 ChatGPT에 `Cannot add this account`가 뜸
@@ -432,6 +438,7 @@ OAuth refresh token은 만료되어 새 authorization flow가 시작된 상태�
 ## 공식 참고 문서
 
 - [OpenAI MCP authentication](https://developers.openai.com/plugins/build/auth)
+- [Auth0: ChatGPT에서 원격 MCP 연결 후 대화에 추가하기](https://auth0.com/blog/add-remote-mcp-server-chatgpt/#Step-4--Interact-with-Your-Remote-MCP-Server-in-a-Conversation)
 - [Codex MCP OAuth client registration](https://learn.chatgpt.com/docs/extend/mcp#oauth-client-registration)
 - [Auth0 manual CIMD registration](https://auth0.com/docs/get-started/auth0-overview/create-applications/register-applications-with-cimd)
 - [Auth0 third-party application setup](https://auth0.com/docs/get-started/applications/third-party-applications/configure-third-party-applications)
