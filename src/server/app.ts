@@ -1,7 +1,6 @@
 import express from "express";
-import path from "node:path";
 import { z, ZodError } from "zod";
-import { loadConfig } from "../config/env.js";
+import { loadConfig, type AppConfig } from "../config/env.js";
 import { ApprovalRepository } from "../db/approvals.js";
 import { EventRepository } from "../db/events.js";
 import { query } from "../db/client.js";
@@ -10,40 +9,37 @@ import { handleMcpHttpRequest } from "../mcp/server.js";
 import {
   requireAllowedRemoteOrigin,
   createAuthAttemptGuard,
-  requireClientManager,
   createRemoteAuth,
-  rejectInvalidAuthentication,
+  requireLifeArchiveAdmin,
+  requireMcpToolScope,
   requireRemoteWrites,
-  type AuthenticatedClient
+  requireScopes
 } from "../remote/auth.js";
 import {
-  createEnrollmentCredential,
-  isSha256Hash,
-  parseEnrollmentCredential
-} from "../remote/client-credentials.js";
+  LIFE_ARCHIVE_SCOPES,
+  LIFE_ARCHIVE_WRITE_SCOPE,
+  type AccessTokenVerifier
+} from "../remote/auth0.js";
 import { auditAuthenticatedRequest } from "../remote/request-audit.js";
 import { AuthFailureRateLimiter } from "../remote/auth-rate-limit.js";
 import { captureEvent, contextPack, recallEvents, recentEvents, timeline } from "../remote/tools.js";
 
 const version = "0.4.0";
 
-const enrollmentSchema = z.object({
-  deviceName: z.string().trim().min(1).max(100),
-  agentType: z.enum(["codex", "claude", "hermes"]),
-  label: z.string().trim().min(1).max(100).optional(),
-  expiresInMinutes: z.number().int().min(5).max(60).default(10),
-  canManageClients: z.boolean().default(false),
-  grantIfNoManager: z.boolean().default(false)
-});
+type CreateAppOptions = {
+  verifyAccessToken?: AccessTokenVerifier;
+};
 
-const exchangeSchema = z.object({
-  keyId: z.string().regex(/^[a-f0-9]{16}$/),
-  keyHash: z.string().refine(isSha256Hash, "keyHash must be a lowercase SHA-256 hex digest")
-});
-
-function bearerToken(req: express.Request): string | null {
-  const match = (req.header("authorization") ?? "").match(/^Bearer\s+(.+)$/i);
-  return match ? match[1]!.trim() : null;
+export function buildProtectedResourceMetadata(
+  config: Pick<AppConfig, "auth0Audience" | "auth0Issuer">
+) {
+  if (!config.auth0Audience || !config.auth0Issuer) return null;
+  return {
+    resource: config.auth0Audience,
+    authorization_servers: [config.auth0Issuer],
+    scopes_supported: [...LIFE_ARCHIVE_SCOPES],
+    resource_name: "Life Archive MCP"
+  };
 }
 
 function shellQuote(value: string): string {
@@ -63,7 +59,7 @@ export function buildInstallCommand(input: {
   return `curl -fsSL ${shellQuote(`${input.baseUrl}/api/v1/installers/mcp-client.mjs`)} | node --input-type=module - -- ${common}`;
 }
 
-export function createApp() {
+export function createApp(options: CreateAppOptions = {}) {
   const config = loadConfig();
   const app = express();
   app.disable("x-powered-by");
@@ -78,20 +74,48 @@ export function createApp() {
     maxEntries: config.authRateLimitMaxEntries
   });
   const authAttemptGuard = createAuthAttemptGuard(authRateLimiter);
-  const remoteGuards = [requireAllowedRemoteOrigin, authAttemptGuard, createRemoteAuth(authRateLimiter), auditAuthenticatedRequest] as const;
-  const adminGuards = [...remoteGuards, requireClientManager] as const;
+  const remoteGuards = [
+    requireAllowedRemoteOrigin,
+    authAttemptGuard,
+    createRemoteAuth(authRateLimiter, { config, verifyAccessToken: options.verifyAccessToken }),
+    auditAuthenticatedRequest
+  ] as const;
+  const adminGuards = [...remoteGuards, requireLifeArchiveAdmin] as const;
+  const writeScopeGuard = requireScopes([LIFE_ARCHIVE_WRITE_SCOPE]);
+
+  const sendProtectedResourceMetadata: express.RequestHandler = (_req, res) => {
+    const metadata = buildProtectedResourceMetadata(config);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    if (!metadata) {
+      res.status(503).json({ ok: false, error: "Auth0 OAuth is not configured." });
+      return;
+    }
+    res.json(metadata);
+  };
+
+  app.get("/.well-known/oauth-protected-resource", sendProtectedResourceMetadata);
+  app.get("/.well-known/oauth-protected-resource/mcp", sendProtectedResourceMetadata);
 
   app.get("/", (_req, res) => {
     res.json({
-      service: "ultimate-hermes",
+      service: "life-archive",
       version,
       mcp: "/mcp",
+      oauthProtectedResource: "/.well-known/oauth-protected-resource",
       health: "/api/v1/health",
       readiness: "/api/v1/ready"
     });
   });
 
-  app.post("/mcp", ...remoteGuards, async (req, res, next) => {
+  app.options("/mcp", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version");
+    res.setHeader("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS");
+    res.status(204).send();
+  });
+
+  app.post("/mcp", ...remoteGuards, requireMcpToolScope, async (req, res, next) => {
     try {
       await handleMcpHttpRequest(req, res);
     } catch (error) {
@@ -118,7 +142,7 @@ export function createApp() {
   });
 
   app.get("/api/v1/health", (_req, res) => {
-    res.json({ ok: true, service: "ultimate-hermes", version, uptimeSeconds: Math.floor(process.uptime()) });
+    res.json({ ok: true, service: "life-archive", version, uptimeSeconds: Math.floor(process.uptime()) });
   });
 
   app.get("/api/v1/ready", async (_req, res, next) => {
@@ -128,121 +152,32 @@ export function createApp() {
                 and to_regclass('public.mcp_clients') is not null as schema_ready`
       );
       if (!result.rows[0]?.schema_ready) {
-        res.status(503).json({ ok: false, service: "ultimate-hermes", database: "schema-missing" });
+        res.status(503).json({ ok: false, service: "life-archive", database: "schema-missing" });
         return;
       }
-      res.json({ ok: true, service: "ultimate-hermes", database: "ready" });
+      res.json({ ok: true, service: "life-archive", database: "ready" });
     } catch (error) {
       next(error);
     }
   });
 
-  app.get("/api/v1/installers/mcp-client.mjs", requireAllowedRemoteOrigin, (_req, res, next) => {
-    res.type("text/javascript");
-    res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(path.resolve(process.cwd(), "scripts/install_mcp_client.mjs"), (error) => {
-      if (error) next(error);
-    });
-  });
-
-  app.get("/api/v1/installers/mcp-client.py", requireAllowedRemoteOrigin, (_req, res, next) => {
-    res.type("text/x-python");
-    res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(path.resolve(process.cwd(), "scripts/install_mcp_client.py"), (error) => {
-      if (error) next(error);
-    });
-  });
-
-  app.post("/api/v1/admin/enrollments", ...adminGuards, async (req, res, next) => {
-    try {
-      const input = enrollmentSchema.parse(req.body);
-      const actor = res.locals.hermesClient as AuthenticatedClient;
-      const credential = createEnrollmentCredential();
-      const expiresAt = new Date(Date.now() + input.expiresInMinutes * 60_000);
-      const label = input.label ?? `${input.deviceName}-${input.agentType}`;
-      const canManageClients = await new McpClientRepository().createEnrollment({
-        id: credential.id,
-        tokenHash: credential.hash,
-        label,
-        deviceName: input.deviceName,
-        agentType: input.agentType,
-        canManageClients: input.canManageClients,
-        grantIfNoManager: input.grantIfNoManager,
-        expiresAt,
-        createdByClientId: actor.id
+  app.all(
+    [
+      "/api/v1/installers/mcp-client.mjs",
+      "/api/v1/installers/mcp-client.py",
+      "/api/v1/admin/enrollments",
+      "/api/v1/enrollments/exchange",
+      "/api/v1/admin/clients",
+      "/api/v1/admin/clients/:clientId/revoke"
+    ],
+    (_req, res) => {
+      res.setHeader("Cache-Control", "no-store");
+      res.status(410).json({
+        ok: false,
+        error: "MCP client keys and installers are retired. Connect through Auth0 OAuth instead."
       });
-      res.status(201).json({
-        ok: true,
-        enrollment: {
-          label,
-          deviceName: input.deviceName,
-          agentType: input.agentType,
-          expiresAt,
-          canManageClients,
-          code: credential.value,
-          installCommand: buildInstallCommand({
-            baseUrl: config.publicBaseUrl,
-            enrollmentToken: credential.value,
-            deviceName: input.deviceName,
-            agentType: input.agentType
-          })
-        }
-      });
-    } catch (error) {
-      next(error);
     }
-  });
-
-  app.post("/api/v1/enrollments/exchange", requireAllowedRemoteOrigin, authAttemptGuard, async (req, res, next) => {
-    try {
-      const enrollment = parseEnrollmentCredential(bearerToken(req) ?? "");
-      const input = exchangeSchema.parse(req.body);
-      if (!enrollment) {
-        rejectInvalidAuthentication(req, res, authRateLimiter, "Invalid or expired enrollment token.");
-        return;
-      }
-      const client = await new McpClientRepository().exchangeEnrollment({
-        enrollmentId: enrollment.enrollmentId,
-        tokenHash: enrollment.hash,
-        keyId: input.keyId,
-        keyHash: input.keyHash
-      });
-      if (!client) {
-        rejectInvalidAuthentication(req, res, authRateLimiter, "Invalid or expired enrollment token.");
-        return;
-      }
-      res.status(201).json({ ok: true, client });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/v1/admin/clients", ...adminGuards, async (_req, res, next) => {
-    try {
-      res.json({ ok: true, clients: await new McpClientRepository().listClients() });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/v1/admin/clients/:clientId/revoke", ...adminGuards, async (req, res, next) => {
-    try {
-      const actor = res.locals.hermesClient as AuthenticatedClient;
-      const clientId = z.string().min(1).max(100).parse(req.params.clientId);
-      if (actor.id === clientId) {
-        res.status(409).json({ ok: false, error: "A client cannot revoke its own key." });
-        return;
-      }
-      const client = await new McpClientRepository().revoke(clientId);
-      if (!client) {
-        res.status(404).json({ ok: false, error: "Active client not found." });
-        return;
-      }
-      res.json({ ok: true, client });
-    } catch (error) {
-      next(error);
-    }
-  });
+  );
 
   app.get("/api/v1/admin/request-logs", ...adminGuards, async (req, res, next) => {
     try {
@@ -277,7 +212,7 @@ export function createApp() {
     }
   });
 
-  app.post("/api/v1/events", ...remoteGuards, requireRemoteWrites, async (req, res, next) => {
+  app.post("/api/v1/events", ...remoteGuards, writeScopeGuard, requireRemoteWrites, async (req, res, next) => {
     try {
       res.json(await captureEvent(req.body));
     } catch (error) {

@@ -1,12 +1,12 @@
 {
-  "name": "ultimate-hermes",
+  "name": "life-archive-mcp",
   "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "Shared Supabase memory and remote MCP service for Hermes, Codex, and Claude",
+  "description": "Auth0-protected shared Supabase memory MCP for ChatGPT and Codex",
   "bin": {
     "hermes": "./dist/src/cli/index.js",
-    "ultimate-hermes-mcp": "./dist/src/mcp/server.js"
+    "life-archive-mcp": "./dist/src/mcp/server.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -23,9 +23,6 @@
     "db:migrate": "npm run build && node dist/src/cli/index.js migrate",
     "db:migrate:supabase": "scripts/migrate_local_db_to_supabase.sh",
     "setup:check": "npm run build && node dist/src/cli/index.js setup check",
-    "connect": "node scripts/manage_mcp_clients.mjs connect",
-    "pair": "node scripts/manage_mcp_clients.mjs pair",
-    "clients": "node scripts/manage_mcp_clients.mjs",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f hermes"
@@ -36,6 +33,7 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
+    "jose": "^6.2.8",
     "pg": "^8.13.1",
     "zod": "^3.25.76"
   },

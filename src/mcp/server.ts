@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE } from "../remote/auth0.js";
 import { callRemoteTool } from "../remote/tools.js";
 
 const readOnlyAnnotations = {
@@ -18,6 +19,17 @@ const appendOnlyAnnotations = {
   destructiveHint: false,
   idempotentHint: false,
   openWorldHint: false
+};
+
+const readAuthMeta = {
+  securitySchemes: [{ type: "oauth2", scopes: [LIFE_ARCHIVE_READ_SCOPE] }]
+};
+
+const writeAuthMeta = {
+  securitySchemes: [{
+    type: "oauth2",
+    scopes: [LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE]
+  }]
 };
 
 const filters = {
@@ -52,21 +64,26 @@ async function invoke(name: string, args: unknown) {
     };
   } catch (error) {
     return {
-      content: [{ type: "text" as const, text: error instanceof Error ? error.message : "Ultimate Hermes tool failed." }],
+      content: [{ type: "text" as const, text: error instanceof Error ? error.message : "Life Archive tool failed." }],
       isError: true
     };
   }
 }
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: "ultimate-hermes", version: "0.2.0" });
+  const server = new McpServer({
+    name: "life-archive",
+    version: "0.4.0",
+    description: "Private durable memory for the authenticated owner. Auth0 OAuth is required."
+  });
 
   server.registerTool(
     "recent_events",
     {
       description: "List recent durable Life Archive events from the shared Supabase/Postgres memory.",
       inputSchema: { limit: z.number().int().positive().max(100).optional().describe("Maximum events, default 25.") },
-      annotations: readOnlyAnnotations
+      annotations: readOnlyAnnotations,
+      _meta: readAuthMeta
     },
     async (args) => invoke("recent_events", args)
   );
@@ -80,7 +97,8 @@ export function createMcpServer(): McpServer {
         limit: z.number().int().positive().max(50).optional().describe("Maximum matches, default 10."),
         ...filters
       },
-      annotations: readOnlyAnnotations
+      annotations: readOnlyAnnotations,
+      _meta: readAuthMeta
     },
     async (args) => invoke("recall_events", args)
   );
@@ -94,7 +112,8 @@ export function createMcpServer(): McpServer {
         limit: z.number().int().positive().max(250).optional().describe("Maximum events, default 100."),
         ...filters
       },
-      annotations: readOnlyAnnotations
+      annotations: readOnlyAnnotations,
+      _meta: readAuthMeta
     },
     async (args) => invoke("timeline", args)
   );
@@ -102,13 +121,14 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "context_pack",
     {
-      description: "Generate an agent-readable Markdown context pack from the shared Ultimate Hermes memory.",
+      description: "Generate an agent-readable Markdown context pack from the shared Life Archive memory.",
       inputSchema: {
         query: z.string().min(1).max(1_000),
         limit: z.number().int().positive().max(20).optional().describe("Maximum recalled records, default 8."),
         ...filters
       },
-      annotations: readOnlyAnnotations
+      annotations: readOnlyAnnotations,
+      _meta: readAuthMeta
     },
     async (args) => invoke("context_pack", args)
   );
@@ -121,7 +141,8 @@ export function createMcpServer(): McpServer {
         project: z.string().min(1).max(500),
         limit: z.number().int().positive().max(100).optional().describe("Maximum recalled records, default 20.")
       },
-      annotations: readOnlyAnnotations
+      annotations: readOnlyAnnotations,
+      _meta: readAuthMeta
     },
     async (args) => invoke("project_status", args)
   );
@@ -130,7 +151,8 @@ export function createMcpServer(): McpServer {
     "memory_status",
     {
       description: "Check canonical memory table counts and the pgvector extension version.",
-      annotations: readOnlyAnnotations
+      annotations: readOnlyAnnotations,
+      _meta: readAuthMeta
     },
     async () => invoke("memory_status", {})
   );
@@ -154,7 +176,8 @@ export function createMcpServer(): McpServer {
         project: z.string().max(500).optional(),
         metadata: z.record(z.unknown()).optional()
       },
-      annotations: appendOnlyAnnotations
+      annotations: appendOnlyAnnotations,
+      _meta: writeAuthMeta
     },
     async (args) => invoke("capture_event", args)
   );
@@ -171,7 +194,8 @@ export function createMcpServer(): McpServer {
         sha256: z.string().max(128).optional(),
         metadata: z.record(z.unknown()).optional()
       },
-      annotations: appendOnlyAnnotations
+      annotations: appendOnlyAnnotations,
+      _meta: writeAuthMeta
     },
     async (args) => invoke("link_source", args)
   );

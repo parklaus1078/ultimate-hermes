@@ -158,7 +158,7 @@ export async function contextPack(argsInput: unknown): Promise<ToolResult> {
   const recent = await repo.recent(5);
 
   const sections = [
-    `# Ultimate Hermes Context Pack: ${queryText}`,
+    `# Life Archive Context Pack: ${queryText}`,
     "",
     "## Source of Truth",
     "- Life Archive / Supabase Postgres `life_events` is the durable source of truth.",

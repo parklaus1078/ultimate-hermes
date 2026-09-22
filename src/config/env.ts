@@ -16,8 +16,13 @@ export type AppConfig = {
   port: number;
   host: string;
   publicBaseUrl: string;
-  apiToken: string | null;
-  acceptLegacyApiToken: boolean;
+  auth0Issuer: string | null;
+  auth0Audience: string | null;
+  auth0AllowedSubjects: string[];
+  auth0ClockToleranceSeconds: number;
+  auth0MaxAccessTokenLifetimeSeconds: number;
+  auth0SessionStartedAtClaim: string | null;
+  auth0MaxSessionAgeSeconds: number;
   trustProxyHops: number;
   authRateLimitEnabled: boolean;
   authRateLimitMaxFailures: number;
@@ -42,6 +47,21 @@ export type AppConfig = {
     embedding: { service: string; account: string };
   };
 };
+
+function normalizedUrlEnv(name: string, value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`Invalid URL env var ${name}: ${trimmed}`);
+  }
+  if (parsed.search || parsed.hash) {
+    throw new Error(`Environment variable ${name} must not include a query string or fragment.`);
+  }
+  return parsed.toString();
+}
 
 function intEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -105,6 +125,26 @@ export function loadConfig(): AppConfig {
   const port = intEnv("HERMES_PORT", intEnv("PORT", 8787));
   const host = strEnv("HERMES_HOST", nodeEnv === "production" ? "0.0.0.0" : "127.0.0.1");
   const baseUrl = publicBaseUrl(host, port);
+  const issuer = normalizedUrlEnv(
+    "LIFE_ARCHIVE_AUTH0_ISSUER",
+    process.env.LIFE_ARCHIVE_AUTH0_ISSUER ?? process.env.AUTH0_ISSUER
+  );
+  const audience = normalizedUrlEnv(
+    "LIFE_ARCHIVE_AUTH0_AUDIENCE",
+    process.env.LIFE_ARCHIVE_AUTH0_AUDIENCE
+  );
+  const normalizedAudience = audience ? audience.replace(/\/$/, "") : null;
+  const sessionStartedAtClaim = process.env.LIFE_ARCHIVE_AUTH0_SESSION_STARTED_AT_CLAIM?.trim() || null;
+  if (nodeEnv === "production") {
+    if (!issuer) throw new Error("Missing required env var LIFE_ARCHIVE_AUTH0_ISSUER");
+    if (!audience) throw new Error("Missing required env var LIFE_ARCHIVE_AUTH0_AUDIENCE");
+    if (!issuer.startsWith("https://")) {
+      throw new Error("LIFE_ARCHIVE_AUTH0_ISSUER must use HTTPS in production.");
+    }
+    if (!audience.startsWith("https://")) {
+      throw new Error("LIFE_ARCHIVE_AUTH0_AUDIENCE must use HTTPS in production.");
+    }
+  }
   const legacyDatabaseUrl = process.env.HERMES_DATABASE_URL?.trim() || undefined;
   const databaseUrl = strEnv(
     "HERMES_RUNTIME_DATABASE_URL",
@@ -129,8 +169,23 @@ export function loadConfig(): AppConfig {
     port,
     host,
     publicBaseUrl: baseUrl,
-    apiToken: process.env.HERMES_API_TOKEN?.trim() || null,
-    acceptLegacyApiToken: boolEnv("HERMES_ACCEPT_LEGACY_API_TOKEN", false),
+    auth0Issuer: issuer ? (issuer.endsWith("/") ? issuer : `${issuer}/`) : null,
+    auth0Audience: normalizedAudience,
+    auth0AllowedSubjects: csvEnv("LIFE_ARCHIVE_AUTH0_ALLOWED_SUBJECTS"),
+    auth0ClockToleranceSeconds: rangedIntEnv("LIFE_ARCHIVE_AUTH0_CLOCK_TOLERANCE_SECONDS", 5, 0, 300),
+    auth0MaxAccessTokenLifetimeSeconds: rangedIntEnv(
+      "LIFE_ARCHIVE_AUTH0_MAX_ACCESS_TOKEN_LIFETIME_SECONDS",
+      3_600,
+      300,
+      3_600
+    ),
+    auth0SessionStartedAtClaim: sessionStartedAtClaim,
+    auth0MaxSessionAgeSeconds: rangedIntEnv(
+      "LIFE_ARCHIVE_AUTH0_MAX_SESSION_AGE_SECONDS",
+      15_552_000,
+      86_400,
+      15_552_000
+    ),
     trustProxyHops: rangedIntEnv("HERMES_TRUST_PROXY_HOPS", 0, 0, 10),
     authRateLimitEnabled: boolEnv("HERMES_AUTH_RATE_LIMIT_ENABLED", true),
     authRateLimitMaxFailures: rangedIntEnv("HERMES_AUTH_RATE_LIMIT_MAX_FAILURES", 10, 2, 1_000),

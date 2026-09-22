@@ -3,6 +3,13 @@ import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { createMcpServer, mcpToolNames } from "../../src/mcp/server.js";
 import { createApp } from "../../src/server/app.js";
+import {
+  AuthorizationError,
+  LIFE_ARCHIVE_ADMIN_SCOPE,
+  LIFE_ARCHIVE_READ_SCOPE,
+  LIFE_ARCHIVE_WRITE_SCOPE,
+  type AccessTokenVerifier
+} from "../../src/remote/auth0.js";
 
 const originalEnv = { ...process.env };
 
@@ -10,7 +17,40 @@ afterEach(() => {
   process.env = { ...originalEnv };
 });
 
-describe.sequential("Ultimate Hermes MCP server", () => {
+const verifyTestToken: AccessTokenVerifier = async (token) => {
+  if (token !== "test-token") throw new AuthorizationError("Invalid test access token.");
+  return {
+    id: null,
+    keyId: "auth0:test-owner",
+    label: "test-owner",
+    deviceName: "test-client",
+    agentType: "other",
+    canManageClients: true,
+    authentication: "auth0-oauth",
+    subject: "auth0|test-owner",
+    scopes: [LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE, LIFE_ARCHIVE_ADMIN_SCOPE],
+    permissions: [LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE, LIFE_ARCHIVE_ADMIN_SCOPE],
+    authInfo: {
+      token,
+      clientId: "test-client",
+      scopes: [LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE, LIFE_ARCHIVE_ADMIN_SCOPE],
+      expiresAt: Math.floor(Date.now() / 1_000) + 3_600,
+      resource: new URL("https://life-archive.example.com/mcp")
+    }
+  };
+};
+
+const verifyReadOnlyToken: AccessTokenVerifier = async (token) => {
+  const client = await verifyTestToken(token);
+  return {
+    ...client,
+    canManageClients: false,
+    scopes: [LIFE_ARCHIVE_READ_SCOPE],
+    authInfo: client.authInfo ? { ...client.authInfo, scopes: [LIFE_ARCHIVE_READ_SCOPE] } : undefined
+  };
+};
+
+describe.sequential("Life Archive MCP server", () => {
   it("registers the shared Life Archive tool surface", () => {
     const server = createMcpServer();
     expect(mcpToolNames).toEqual(
@@ -56,15 +96,13 @@ describe.sequential("Ultimate Hermes MCP server", () => {
     });
 
     child.kill();
-    expect(JSON.parse(response)).toMatchObject({ result: { serverInfo: { name: "ultimate-hermes" } } });
+    expect(JSON.parse(response)).toMatchObject({ result: { serverInfo: { name: "life-archive" } } });
   });
 
-  it("serves authenticated stateless Streamable HTTP", async () => {
+  it("serves Auth0-authenticated stateless Streamable HTTP", async () => {
     process.env.NODE_ENV = "test";
     process.env.HERMES_HOST = "127.0.0.1";
-    process.env.HERMES_API_TOKEN = "test-token";
-    process.env.HERMES_ACCEPT_LEGACY_API_TOKEN = "true";
-    const listener = createApp().listen(0, "127.0.0.1");
+    const listener = createApp({ verifyAccessToken: verifyTestToken }).listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => listener.once("listening", resolve));
     const { port } = listener.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/mcp`;
@@ -86,6 +124,7 @@ describe.sequential("Ultimate Hermes MCP server", () => {
         body
       });
       expect(unauthorized.status).toBe(401);
+      expect(unauthorized.headers.get("www-authenticate")).toContain("resource_metadata=");
 
       const response = await fetch(url, {
         method: "POST",
@@ -98,7 +137,83 @@ describe.sequential("Ultimate Hermes MCP server", () => {
       });
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toContain("application/json");
-      expect(await response.json()).toMatchObject({ result: { serverInfo: { name: "ultimate-hermes" } } });
+      expect(await response.json()).toMatchObject({ result: { serverInfo: { name: "life-archive" } } });
+    } finally {
+      await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it("publishes OAuth discovery and enforces write scope", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.HERMES_HOST = "127.0.0.1";
+    process.env.LIFE_ARCHIVE_AUTH0_ISSUER = "https://life-archive-test.us.auth0.com/";
+    process.env.LIFE_ARCHIVE_AUTH0_AUDIENCE = "https://life-archive.example.com/mcp";
+    const listener = createApp({ verifyAccessToken: verifyReadOnlyToken }).listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => listener.once("listening", resolve));
+    const { port } = listener.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const metadata = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+      expect(metadata.status).toBe(200);
+      const metadataBody = await metadata.json() as { scopes_supported?: string[] };
+      expect(metadataBody).toMatchObject({
+        resource: "https://life-archive.example.com/mcp",
+        authorization_servers: ["https://life-archive-test.us.auth0.com/"],
+        scopes_supported: expect.arrayContaining([
+          LIFE_ARCHIVE_READ_SCOPE,
+          LIFE_ARCHIVE_WRITE_SCOPE
+        ])
+      });
+      expect(metadataBody.scopes_supported).not.toContain("offline_access");
+
+      const deniedWrite = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          authorization: "Bearer test-token",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "write-denied",
+          method: "tools/call",
+          params: { name: "capture_event", arguments: { title: "must not reach the tool" } }
+        })
+      });
+      expect(deniedWrite.status).toBe(403);
+      expect(deniedWrite.headers.get("www-authenticate")).toContain("insufficient_scope");
+      expect(await deniedWrite.json()).toMatchObject({ requiredScopes: [LIFE_ARCHIVE_WRITE_SCOPE] });
+
+      const deniedBatchWrite = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          authorization: "Bearer test-token",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify([
+          { jsonrpc: "2.0", id: "read", method: "tools/list" },
+          {
+            jsonrpc: "2.0",
+            id: "write",
+            method: "tools/call",
+            params: { name: "link_source", arguments: {} }
+          }
+        ])
+      });
+      expect(deniedBatchWrite.status).toBe(403);
+
+      const retiredKeys = await fetch(`${baseUrl}/api/v1/admin/clients`);
+      expect(retiredKeys.status).toBe(410);
+      const retiredInstaller = await fetch(`${baseUrl}/api/v1/installers/mcp-client.mjs`);
+      expect(retiredInstaller.status).toBe(410);
+
+      const deniedAdmin = await fetch(`${baseUrl}/api/v1/admin/request-logs`, {
+        headers: { authorization: "Bearer test-token" }
+      });
+      expect(deniedAdmin.status).toBe(403);
+      expect(await deniedAdmin.json()).toMatchObject({ requiredScopes: [LIFE_ARCHIVE_ADMIN_SCOPE] });
     } finally {
       await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
     }
@@ -107,9 +222,7 @@ describe.sequential("Ultimate Hermes MCP server", () => {
   it("rejects browser origins unless they are explicitly allowed", async () => {
     process.env.NODE_ENV = "test";
     process.env.HERMES_HOST = "127.0.0.1";
-    process.env.HERMES_API_TOKEN = "test-token";
-    process.env.HERMES_ACCEPT_LEGACY_API_TOKEN = "true";
-    const listener = createApp().listen(0, "127.0.0.1");
+    const listener = createApp({ verifyAccessToken: verifyTestToken }).listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => listener.once("listening", resolve));
     const { port } = listener.address() as AddressInfo;
 
@@ -133,13 +246,11 @@ describe.sequential("Ultimate Hermes MCP server", () => {
   it("blocks repeated authentication failures without trusting the leftmost forwarded address", async () => {
     process.env.NODE_ENV = "test";
     process.env.HERMES_HOST = "127.0.0.1";
-    process.env.HERMES_API_TOKEN = "test-token";
-    process.env.HERMES_ACCEPT_LEGACY_API_TOKEN = "true";
     process.env.HERMES_TRUST_PROXY_HOPS = "1";
     process.env.HERMES_AUTH_RATE_LIMIT_MAX_FAILURES = "3";
     process.env.HERMES_AUTH_RATE_LIMIT_WINDOW_MS = "60000";
     process.env.HERMES_AUTH_RATE_LIMIT_BLOCK_MS = "120000";
-    const listener = createApp().listen(0, "127.0.0.1");
+    const listener = createApp({ verifyAccessToken: verifyTestToken }).listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => listener.once("listening", resolve));
     const { port } = listener.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/mcp`;

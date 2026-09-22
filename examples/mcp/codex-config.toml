@@ -1,5 +1,5 @@
-[mcp_servers.ultimate-hermes]
-url = "https://YOUR-ULTIMATE-HERMES-HOST/mcp"
-bearer_token_env_var = "ULTIMATE_HERMES_API_TOKEN"
+[mcp_servers.life-archive]
+url = "https://YOUR-LIFE-ARCHIVE.onrender.com/mcp"
+oauth_resource = "https://YOUR-LIFE-ARCHIVE.onrender.com/mcp"
 startup_timeout_sec = 30
 tool_timeout_sec = 120

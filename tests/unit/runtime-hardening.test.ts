@@ -10,18 +10,50 @@ afterEach(() => {
 });
 
 describe.sequential("runtime database hardening", () => {
-  it("rejects the legacy shared token unless bootstrap mode is explicitly enabled", () => {
-    delete process.env.HERMES_ACCEPT_LEGACY_API_TOKEN;
-    expect(loadConfig().acceptLegacyApiToken).toBe(false);
+  it("requires Auth0 issuer and audience in production", () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.LIFE_ARCHIVE_AUTH0_ISSUER;
+    delete process.env.AUTH0_ISSUER;
+    delete process.env.LIFE_ARCHIVE_AUTH0_AUDIENCE;
+    expect(() => loadConfig()).toThrow(/LIFE_ARCHIVE_AUTH0_ISSUER/);
 
-    process.env.HERMES_ACCEPT_LEGACY_API_TOKEN = "true";
-    expect(loadConfig().acceptLegacyApiToken).toBe(true);
+    process.env.LIFE_ARCHIVE_AUTH0_ISSUER = "https://tenant.us.auth0.com";
+    expect(() => loadConfig()).toThrow(/LIFE_ARCHIVE_AUTH0_AUDIENCE/);
+
+    process.env.LIFE_ARCHIVE_AUTH0_AUDIENCE = "https://life-archive.example.com/mcp";
+    expect(loadConfig()).toMatchObject({
+      auth0Issuer: "https://tenant.us.auth0.com/",
+      auth0Audience: "https://life-archive.example.com/mcp",
+      auth0MaxAccessTokenLifetimeSeconds: 3_600,
+      auth0SessionStartedAtClaim: null,
+      auth0MaxSessionAgeSeconds: 15_552_000
+    });
+
+    process.env.LIFE_ARCHIVE_AUTH0_MAX_ACCESS_TOKEN_LIFETIME_SECONDS = "3601";
+    expect(() => loadConfig()).toThrow(/must be between 300 and 3600/);
+    process.env.LIFE_ARCHIVE_AUTH0_MAX_ACCESS_TOKEN_LIFETIME_SECONDS = "3600";
+    process.env.LIFE_ARCHIVE_AUTH0_MAX_SESSION_AGE_SECONDS = "15552001";
+    expect(() => loadConfig()).toThrow(/must be between 86400 and 15552000/);
   });
 
-  it("keeps the legacy-token rollout switch deployment-specific in the public Blueprint", async () => {
+  it("ships Auth0-only production variables in the public Blueprint", async () => {
     const blueprint = await readFile(new URL("../../render.yaml", import.meta.url), "utf8");
-    expect(blueprint).toMatch(/HERMES_ACCEPT_LEGACY_API_TOKEN\n\s+sync: false/);
-    expect(blueprint).not.toMatch(/HERMES_ACCEPT_LEGACY_API_TOKEN\n\s+value: ["']?true/);
+    expect(blueprint).toMatch(/LIFE_ARCHIVE_AUTH0_ISSUER\n\s+sync: false/);
+    expect(blueprint).toMatch(/LIFE_ARCHIVE_AUTH0_AUDIENCE\n\s+sync: false/);
+    expect(blueprint).toMatch(/LIFE_ARCHIVE_AUTH0_MAX_ACCESS_TOKEN_LIFETIME_SECONDS\n\s+value: ["']3600["']/);
+    expect(blueprint).not.toMatch(/LIFE_ARCHIVE_AUTH0_SESSION_STARTED_AT_CLAIM/);
+    expect(blueprint).not.toMatch(/LIFE_ARCHIVE_AUTH0_MAX_SESSION_AGE_SECONDS/);
+    expect(blueprint).not.toMatch(/HERMES_API_TOKEN|HERMES_ACCEPT_LEGACY_API_TOKEN/);
+
+    const action = await readFile(
+      new URL("../../auth0/actions/enforce-life-archive-180-day-session.js", import.meta.url),
+      "utf8"
+    );
+    expect(action).toContain("180 * 24 * 60 * 60 * 1000");
+    expect(action).toContain("api.refreshToken.setExpiresAt");
+    expect(action).toContain("api.access.deny");
+    expect(action).toContain("/session_started_at");
+    expect(action).not.toContain("setMetadata");
   });
 
   it("enables bounded authentication failure blocking and pins the Render proxy hop", async () => {

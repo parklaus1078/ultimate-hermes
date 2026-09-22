@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ultimate-hermes-mcp
+    name: life-archive-mcp
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: starter
@@ -15,10 +15,14 @@ services:
         value: 0.0.0.0
       - key: HERMES_RUNTIME_DATABASE_URL
         sync: false
-      - key: HERMES_API_TOKEN
+      - key: LIFE_ARCHIVE_AUTH0_ISSUER
         sync: false
-      - key: HERMES_ACCEPT_LEGACY_API_TOKEN
+      - key: LIFE_ARCHIVE_AUTH0_AUDIENCE
         sync: false
+      - key: LIFE_ARCHIVE_AUTH0_ALLOWED_SUBJECTS
+        sync: false
+      - key: LIFE_ARCHIVE_AUTH0_MAX_ACCESS_TOKEN_LIFETIME_SECONDS
+        value: "3600"
       - key: HERMES_SECRET_STORE
         value: env
       - key: HERMES_ALLOW_REMOTE_WRITES

@@ -6,7 +6,7 @@ const config = loadConfig();
 await assertSchemaReady();
 
 const server = createApp().listen(config.port, config.host, () => {
-  console.log(`Hermes server listening on http://${config.host}:${config.port}`);
+  console.log(`Life Archive server listening on http://${config.host}:${config.port}`);
 });
 
 process.on("SIGTERM", () => {

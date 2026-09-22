@@ -1,8 +1,4 @@
-mcp_servers:
-  ultimate-hermes:
-    url: ${ULTIMATE_HERMES_MCP_URL}
-    headers:
-      Authorization: Bearer ${MCP_ULTIMATE_HERMES_API_KEY}
-    timeout: 180
-    connect_timeout: 60
-    enabled: true
+# The public Auth0 MCP rollout currently supports ChatGPT and Codex.
+# Hermes Agent should keep using the native life_archive memory provider until
+# its remote OAuth client flow is implemented and verified separately.
+mcp_servers: {}
