@@ -6,7 +6,7 @@ import {
   type CryptoKey,
   type JWTVerifyGetKey
 } from "jose";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   LIFE_ARCHIVE_READ_SCOPE,
   LIFE_ARCHIVE_OFFLINE_SCOPE,
@@ -102,6 +102,30 @@ describe("Auth0 MCP access token authentication", () => {
     await expect(
       verifyAuth0AccessToken("old-static-token", config, keyResolver)
     ).rejects.toThrow(/invalid or expired/i);
+  });
+
+  it("logs only a bounded token shape when a non-JWT token is rejected", async () => {
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(
+        verifyAuth0AccessToken("opaque-probe-private", config, keyResolver)
+      ).rejects.toThrow(/invalid or expired/i);
+      const warning = warnings.mock.calls.map(([line]) => String(line))
+        .find((line) => line.includes('"event":"auth0_jwt_verify_failed"'));
+      expect(warning).toBeDefined();
+      expect(JSON.parse(warning!)).toMatchObject({
+        reason: "Invalid Compact JWS",
+        tokenShape: {
+          segments: 1,
+          lengthBand: "under-100",
+          containsWhitespace: false,
+          nestedBearerPrefix: false
+        }
+      });
+      expect(warning).not.toContain("opaque-probe-private");
+    } finally {
+      warnings.mockRestore();
+    }
   });
 
   it("rejects expired tokens and tokens with an excessive access-token lifetime", async () => {
