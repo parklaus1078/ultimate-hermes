@@ -120,6 +120,23 @@ function numericDateClaim(payload: JWTPayload, claim: string): number | null {
   return null;
 }
 
+function tokenShape(token: string): {
+  segments: number | "more-than-five";
+  lengthBand: "under-100" | "100-499" | "500-1999" | "2000-plus";
+  containsWhitespace: boolean;
+  nestedBearerPrefix: boolean;
+} {
+  const segmentCount = token.split(".").length;
+  return {
+    segments: segmentCount > 5 ? "more-than-five" : segmentCount,
+    lengthBand: token.length < 100 ? "under-100" :
+      token.length < 500 ? "100-499" :
+        token.length < 2_000 ? "500-1999" : "2000-plus",
+    containsWhitespace: /\s/.test(token),
+    nestedBearerPrefix: /^Bearer\s/i.test(token)
+  };
+}
+
 export async function verifyAuth0AccessToken(
   token: string,
   config: Auth0Config,
@@ -140,7 +157,8 @@ export async function verifyAuth0AccessToken(
     console.warn(JSON.stringify({
       level: "warn",
       event: "auth0_jwt_verify_failed",
-      reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)
+      reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+      tokenShape: tokenShape(token)
     }));
     throw new AuthorizationError("Invalid or expired Auth0 access token.");
   }
