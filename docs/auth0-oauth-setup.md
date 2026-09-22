@@ -341,6 +341,10 @@ curl -fsS "$LIFE_ARCHIVE_BASE_URL/.well-known/oauth-protected-resource"
 curl -i -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
   -H 'Content-Type: application/json' \
   --data '{}'
+curl -fsS -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
 정상 결과는 다음과 같습니다.
@@ -350,11 +354,31 @@ curl -i -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
 - OAuth metadata의 `resource`가 정확한 `MCP_URL`입니다.
 - token 없는 `/mcp` 요청은 일부러 `401`을 반환합니다.
 - `401` 응답의 `WWW-Authenticate`에 `resource_metadata=`가 있습니다.
+- 로그인하지 않은 `tools/list`에는 도구 이름과 최상위 `securitySchemes`가 보이지만 기억 데이터는 나오지 않습니다.
 
 마지막으로 ChatGPT에서 `memory_status` 또는 `recent_events`를 실행하고, Codex에서도 Life
 Archive의 최근 memory 조회를 요청합니다.
 
+ChatGPT에서 계정 연결이 완료된 뒤에는 새 대화를 열고 입력창의 **+ → More → Developer mode**에서
+**Life Archive**를 대화의 도구로 선택합니다. `최근 기억 보여줘`처럼 읽기 요청을 보내고, 도구
+호출 확인창이 나오면 내용과 권한을 확인한 뒤 승인합니다. 이 단계는 계정 연결이 성공한 다음에만
+가능합니다. 계정 추가 화면에서 `Cannot add this account`가 뜬다면 대화 선택 문제가 아니므로
+11단계의 OAuth/MCP 점검을 먼저 진행합니다.
+
 ## 11. 자주 생기는 문제
+
+### Auth0 로그인은 성공했는데 ChatGPT에 `Cannot add this account`가 뜸
+
+- 비밀번호를 다시 입력할 필요는 없습니다. Auth0의 **Monitoring → Logs**에 ChatGPT의
+  `Success Login`과 `Success Exchange`가 있는지 먼저 확인합니다.
+- 위 10단계의 익명 `tools/list` 요청이 `200`인지 확인합니다. 각 도구의 최상위
+  `securitySchemes`에 `memory:read` 또는 `memory:write`가 보여야 ChatGPT가 필요한 권한을
+  요청할 수 있습니다.
+- Render 로그에서 `mcp_authorization_rejected`를 찾습니다. `insufficient_scope`와
+  `grantedScopeCount:0`이면 새로 연결하면서 권한을 다시 승인해야 합니다.
+  `origin_not_allowed`면 `HERMES_ALLOWED_ORIGINS` 설정을 확인합니다.
+- 서버 수정 후에도 이전 연결 시도를 재사용한다면 ChatGPT에서 해당 Life Archive 연결을
+  끊고 다시 연결합니다. 기존 access token에 새 scope가 자동 추가되지는 않습니다.
 
 ### `invalid_client`
 
@@ -414,6 +438,7 @@ OAuth refresh token은 만료되어 새 authorization flow가 시작된 상태�
 ## 공식 참고 문서
 
 - [OpenAI MCP authentication](https://developers.openai.com/plugins/build/auth)
+- [Auth0: ChatGPT에서 원격 MCP 연결 후 대화에 추가하기](https://auth0.com/blog/add-remote-mcp-server-chatgpt/#Step-4--Interact-with-Your-Remote-MCP-Server-in-a-Conversation)
 - [Codex MCP OAuth client registration](https://learn.chatgpt.com/docs/extend/mcp#oauth-client-registration)
 - [Auth0 manual CIMD registration](https://auth0.com/docs/get-started/auth0-overview/create-applications/register-applications-with-cimd)
 - [Auth0 third-party application setup](https://auth0.com/docs/get-started/applications/third-party-applications/configure-third-party-applications)

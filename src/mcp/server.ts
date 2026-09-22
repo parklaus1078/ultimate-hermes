@@ -3,6 +3,9 @@ import type { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { normalizeObjectSchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import { toJsonSchemaCompat } from "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE } from "../remote/auth0.js";
 import { callRemoteTool } from "../remote/tools.js";
@@ -31,6 +34,41 @@ const writeAuthMeta = {
     scopes: [LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE]
   }]
 };
+
+// SDK v1.30 serializes securitySchemes only inside _meta. ChatGPT reads the
+// top-level field, so keep both forms until the SDK supports it directly.
+function exposeToolSecuritySchemes(server: McpServer): void {
+  type RegisteredTool = {
+    enabled: boolean;
+    title?: string;
+    description?: string;
+    inputSchema?: Parameters<typeof normalizeObjectSchema>[0];
+    annotations?: Record<string, unknown>;
+    _meta?: { securitySchemes?: Array<{ type: "oauth2"; scopes: string[] }> };
+  };
+  const registeredTools = (server as unknown as {
+    _registeredTools: Record<string, RegisteredTool>;
+  })._registeredTools;
+
+  server.server.setRequestHandler(ListToolsRequestSchema, () => ({
+    tools: Object.entries(registeredTools)
+      .filter(([, tool]) => tool.enabled)
+      .map(([name, tool]) => {
+        const schema = normalizeObjectSchema(tool.inputSchema);
+        return {
+          name,
+          title: tool.title,
+          description: tool.description,
+          inputSchema: schema
+            ? toJsonSchemaCompat(schema, { strictUnions: true, pipeStrategy: "input" })
+            : { type: "object", properties: {} },
+          annotations: tool.annotations,
+          _meta: tool._meta,
+          securitySchemes: tool._meta?.securitySchemes
+        };
+      })
+  }));
+}
 
 const filters = {
   type: z.string().optional().describe("Optional event type filter."),
@@ -199,6 +237,8 @@ export function createMcpServer(): McpServer {
     },
     async (args) => invoke("link_source", args)
   );
+
+  exposeToolSecuritySchemes(server);
 
   return server;
 }

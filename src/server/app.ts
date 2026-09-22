@@ -30,6 +30,13 @@ type CreateAppOptions = {
   verifyAccessToken?: AccessTokenVerifier;
 };
 
+function isPublicMcpDiscovery(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const request = body as { jsonrpc?: unknown; method?: unknown };
+  return request.jsonrpc === "2.0" &&
+    (request.method === "initialize" || request.method === "tools/list");
+}
+
 export function buildProtectedResourceMetadata(
   config: Pick<AppConfig, "auth0Audience" | "auth0Issuer">
 ) {
@@ -74,10 +81,14 @@ export function createApp(options: CreateAppOptions = {}) {
     maxEntries: config.authRateLimitMaxEntries
   });
   const authAttemptGuard = createAuthAttemptGuard(authRateLimiter);
+  const remoteAuth = createRemoteAuth(authRateLimiter, {
+    config,
+    verifyAccessToken: options.verifyAccessToken
+  });
   const remoteGuards = [
     requireAllowedRemoteOrigin,
     authAttemptGuard,
-    createRemoteAuth(authRateLimiter, { config, verifyAccessToken: options.verifyAccessToken }),
+    remoteAuth,
     auditAuthenticatedRequest
   ] as const;
   const adminGuards = [...remoteGuards, requireLifeArchiveAdmin] as const;
@@ -115,7 +126,19 @@ export function createApp(options: CreateAppOptions = {}) {
     res.status(204).send();
   });
 
-  app.post("/mcp", ...remoteGuards, requireMcpToolScope, async (req, res, next) => {
+  app.post("/mcp", requireAllowedRemoteOrigin, async (req, res, next) => {
+    if (!isPublicMcpDiscovery(req.body)) {
+      next();
+      return;
+    }
+    try {
+      await handleMcpHttpRequest(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/mcp", authAttemptGuard, remoteAuth, auditAuthenticatedRequest, requireMcpToolScope, async (req, res, next) => {
     try {
       await handleMcpHttpRequest(req, res);
     } catch (error) {

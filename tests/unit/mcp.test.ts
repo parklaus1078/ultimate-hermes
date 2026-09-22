@@ -118,13 +118,36 @@ describe.sequential("Life Archive MCP server", () => {
     });
 
     try {
-      const unauthorized = await fetch(url, {
+      const discovery = await fetch(url, {
         method: "POST",
         headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },
         body
       });
+      expect(discovery.status).toBe(200);
+      expect(await discovery.json()).toMatchObject({ result: { serverInfo: { name: "life-archive" } } });
+
+      const unauthorized = await fetch(url, {
+        method: "POST",
+        headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "ping", method: "ping" })
+      });
       expect(unauthorized.status).toBe(401);
       expect(unauthorized.headers.get("www-authenticate")).toContain("resource_metadata=");
+
+      for (const payload of [
+        { jsonrpc: "2.0", id: "call", method: "tools/call", params: { name: "recent_events", arguments: {} } },
+        [
+          { jsonrpc: "2.0", id: "init", method: "initialize", params: {} },
+          { jsonrpc: "2.0", id: "call", method: "tools/call", params: { name: "recent_events", arguments: {} } }
+        ]
+      ]) {
+        const denied = await fetch(url, {
+          method: "POST",
+          headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        expect(denied.status).toBe(401);
+      }
 
       const response = await fetch(url, {
         method: "POST",
@@ -138,6 +161,28 @@ describe.sequential("Life Archive MCP server", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toContain("application/json");
       expect(await response.json()).toMatchObject({ result: { serverInfo: { name: "life-archive" } } });
+
+      const toolsResponse = await fetch(url, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "tools", method: "tools/list" })
+      });
+      expect(toolsResponse.status).toBe(200);
+      const toolsBody = await toolsResponse.json() as {
+        result: { tools: Array<{ name: string; securitySchemes?: Array<{ type: string; scopes: string[] }> }> };
+      };
+      expect(toolsBody.result.tools).toHaveLength(mcpToolNames.length);
+      for (const tool of toolsBody.result.tools) {
+        expect(tool.securitySchemes).toEqual([{
+          type: "oauth2",
+          scopes: tool.name === "capture_event" || tool.name === "link_source"
+            ? [LIFE_ARCHIVE_READ_SCOPE, LIFE_ARCHIVE_WRITE_SCOPE]
+            : [LIFE_ARCHIVE_READ_SCOPE]
+        }]);
+      }
     } finally {
       await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
     }
@@ -254,16 +299,7 @@ describe.sequential("Life Archive MCP server", () => {
     await new Promise<void>((resolve) => listener.once("listening", resolve));
     const { port } = listener.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/mcp`;
-    const body = JSON.stringify({
-      jsonrpc: "2.0",
-      id: "rate-limit",
-      method: "initialize",
-      params: {
-        protocolVersion: "2025-11-25",
-        capabilities: {},
-        clientInfo: { name: "rate-limit-test", version: "1.0.0" }
-      }
-    });
+    const body = JSON.stringify({ jsonrpc: "2.0", id: "rate-limit", method: "ping" });
     const request = (authorization: string, forwardedFor: string) => fetch(url, {
       method: "POST",
       headers: {
