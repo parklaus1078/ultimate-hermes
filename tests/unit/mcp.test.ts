@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { spawn } from "node:child_process";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMcpServer, mcpToolNames } from "../../src/mcp/server.js";
 import { createApp } from "../../src/server/app.js";
 import {
@@ -267,6 +267,42 @@ describe.sequential("Life Archive MCP server", () => {
       expect(deniedAdmin.status).toBe(403);
       expect(await deniedAdmin.json()).toMatchObject({ requiredScopes: [LIFE_ARCHIVE_ADMIN_SCOPE] });
     } finally {
+      await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it("logs the rejected MCP operation without credentials or request data", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.HERMES_HOST = "127.0.0.1";
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const listener = createApp({ verifyAccessToken: verifyTestToken }).listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => listener.once("listening", resolve));
+    const { port } = listener.address() as AddressInfo;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          authorization: "Bearer diagnostic-secret",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "private-id",
+          method: "tools/call",
+          params: { name: "capture_event", arguments: { title: "private-memory" } }
+        })
+      });
+      expect(response.status).toBe(401);
+      const warning = warnings.mock.calls.map(([line]) => String(line)).find((line) => line.includes('"event":"mcp_auth_rejected"'));
+      expect(warning).toBeDefined();
+      expect(JSON.parse(warning!)).toMatchObject({ operation: "tools/call", authorizationPresent: true });
+      expect(warning).not.toContain("diagnostic-secret");
+      expect(warning).not.toContain("private-memory");
+      expect(warning).not.toContain("private-id");
+    } finally {
+      warnings.mockRestore();
       await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
     }
   });
