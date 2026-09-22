@@ -1,5 +1,9 @@
 # Ultimate Hermes Supabase + Remote MCP Plan
 
+> 데이터베이스 migration 내용은 유효하지만 이 문서의 `HERMES_API_TOKEN` 인증 설명은
+> 폐기되었습니다. 현재 remote MCP 인증은
+> [Auth0 OAuth 설정 설명서](./auth0-oauth-setup.md)를 따릅니다.
+
 Status: implemented and locally verified; cloud activation awaits user credentials
 Date: 2026-08-06
 Target branch: `feat/add-on-hermes`

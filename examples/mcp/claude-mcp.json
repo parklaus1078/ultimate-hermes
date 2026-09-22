@@ -1,11 +1,8 @@
 {
   "mcpServers": {
-    "ultimate-hermes": {
+    "life-archive": {
       "type": "http",
-      "url": "${ULTIMATE_HERMES_MCP_URL}",
-      "headers": {
-        "Authorization": "Bearer ${ULTIMATE_HERMES_API_TOKEN}"
-      }
+      "url": "https://YOUR-LIFE-ARCHIVE.onrender.com/mcp"
     }
   }
 }

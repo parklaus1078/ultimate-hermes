@@ -2,6 +2,9 @@
 
 Status: legacy fallback
 
+> 이 문서의 shared-token 인증은 폐기되었습니다. 현재 production MCP 연결은
+> [Auth0 OAuth 설정 설명서](./auth0-oauth-setup.md)를 따르세요.
+
 The primary deployment path is now Supabase plus the authenticated HTTPS MCP
 service documented in `README.md`. Use this document only when cloud deployment
 is unavailable and the MacBook must remain the server.

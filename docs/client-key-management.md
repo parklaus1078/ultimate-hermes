@@ -1,4 +1,9 @@
-# MCP Client Key 운영 Runbook
+# MCP Client Key 운영 Runbook (Retired)
+
+> 이 문서는 과거 per-client key 방식을 복구하거나 migration history를 읽기 위한 기록입니다.
+> 현재 production 인증은 Auth0 OAuth만 사용합니다. 새 배포와 새 Agent 연결은
+> [Auth0 OAuth 설정 설명서](./auth0-oauth-setup.md)를 따르세요. 관련 enrollment/client-key
+> HTTP endpoint는 `410 Gone`을 반환합니다.
 
 Ultimate Hermes는 `기기 × Agent`를 하나의 client identity로 취급합니다. 같은 기기의
 Codex, Claude Code, Hermes Agent에는 각각 다른 key를 발급합니다. 서버 DB에는 원문

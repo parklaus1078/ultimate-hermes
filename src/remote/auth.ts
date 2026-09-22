@@ -1,22 +1,25 @@
-import { timingSafeEqual } from "node:crypto";
 import type express from "express";
 import { loadConfig, type AppConfig } from "../config/env.js";
-import { McpClientRepository, type AgentType, type McpClient } from "../db/mcp-clients.js";
 import { AuthFailureRateLimiter } from "./auth-rate-limit.js";
-import { parseClientCredential, safeHashEqual } from "./client-credentials.js";
+import {
+  AuthorizationError,
+  createAuth0AccessTokenVerifier,
+  hasAllScopes,
+  LIFE_ARCHIVE_ADMIN_SCOPE,
+  LIFE_ARCHIVE_READ_SCOPE,
+  LIFE_ARCHIVE_SCOPES,
+  LIFE_ARCHIVE_WRITE_SCOPE,
+  type AccessTokenVerifier,
+  type AuthenticatedClient
+} from "./auth0.js";
 import { boundedHeader, requestAddresses } from "./request-metadata.js";
 
-export type AuthenticatedClient = {
-  id: string | null;
-  keyId: string;
-  label: string;
-  deviceName: string;
-  agentType: AgentType | "legacy" | "local";
-  canManageClients: boolean;
-  authentication: "client-key" | "legacy-token" | "local-development";
-};
+export type { AuthenticatedClient } from "./auth0.js";
 
-type ClientLookup = (keyId: string) => Promise<McpClient | null>;
+type RemoteAuthOptions = {
+  config?: AppConfig;
+  verifyAccessToken?: AccessTokenVerifier;
+};
 
 function isLoopbackHost(host: string): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
@@ -28,53 +31,26 @@ function bearerToken(req: express.Request): string | null {
   return match ? match[1]!.trim() : null;
 }
 
-function safeTokenEqual(actual: string, expected: string): boolean {
-  const actualBuffer = Buffer.from(actual, "utf8");
-  const expectedBuffer = Buffer.from(expected, "utf8");
-  if (actualBuffer.length !== expectedBuffer.length) return false;
-  return timingSafeEqual(actualBuffer, expectedBuffer);
+export function oauthProtectedResourceMetadataUrl(config: Pick<AppConfig, "publicBaseUrl">): string {
+  return new URL("/.well-known/oauth-protected-resource", config.publicBaseUrl).toString();
 }
 
-function authenticatedClient(client: McpClient): AuthenticatedClient {
-  return {
-    id: client.id,
-    keyId: client.keyId,
-    label: client.label,
-    deviceName: client.deviceName,
-    agentType: client.agentType,
-    canManageClients: client.canManageClients,
-    authentication: "client-key"
-  };
-}
-
-export async function authenticateToken(
-  token: string | null,
-  config: Pick<AppConfig, "apiToken" | "acceptLegacyApiToken">,
-  findClient: ClientLookup
-): Promise<AuthenticatedClient | null> {
-  if (
-    token &&
-    config.acceptLegacyApiToken &&
-    config.apiToken &&
-    safeTokenEqual(token, config.apiToken)
-  ) {
-    return {
-      id: null,
-      keyId: "legacy-bootstrap",
-      label: "legacy-bootstrap",
-      deviceName: "legacy-shared-token",
-      agentType: "legacy",
-      canManageClients: true,
-      authentication: "legacy-token"
-    };
+function authorizationChallenge(
+  config: Pick<AppConfig, "publicBaseUrl">,
+  scope: string,
+  error?: "invalid_token" | "insufficient_scope",
+  description?: string
+): string {
+  const attributes = [
+    `resource_metadata="${oauthProtectedResourceMetadataUrl(config)}"`,
+    `scope="${scope}"`
+  ];
+  if (error) attributes.push(`error="${error}"`);
+  if (description) {
+    const safeDescription = description.replace(/["\\\r\n]/g, " ").slice(0, 300);
+    attributes.push(`error_description="${safeDescription}"`);
   }
-
-  if (!token) return null;
-  const parsed = parseClientCredential(token);
-  if (!parsed) return null;
-  const client = await findClient(parsed.keyId);
-  if (!client || !safeHashEqual(parsed.hash, client.keyHash)) return null;
-  return authenticatedClient(client);
+  return `Bearer ${attributes.join(", ")}`;
 }
 
 export function requireAllowedRemoteOrigin(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -141,18 +117,38 @@ export function rejectInvalidAuthentication(
     sendRateLimited(res, decision.retryAfterSeconds);
     return;
   }
+  const config = loadConfig();
   logAuthFailure(req, "mcp_auth_rejected", decision.failures);
-  res.setHeader("WWW-Authenticate", "Bearer");
+  res.setHeader(
+    "WWW-Authenticate",
+    authorizationChallenge(config, LIFE_ARCHIVE_READ_SCOPE, "invalid_token", message)
+  );
   res.setHeader("Cache-Control", "no-store");
   res.status(401).json({ ok: false, error: message });
 }
 
-export function createRemoteAuth(rateLimiter: AuthFailureRateLimiter) {
-  return async function requireRemoteAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-    const config = loadConfig();
-    const repository = new McpClientRepository();
+function rejectInsufficientAuthorization(
+  res: express.Response,
+  config: Pick<AppConfig, "publicBaseUrl">,
+  requiredScopes: readonly string[],
+  message: string
+): void {
+  res.setHeader(
+    "WWW-Authenticate",
+    authorizationChallenge(config, requiredScopes.join(" "), "insufficient_scope", message)
+  );
+  res.setHeader("Cache-Control", "no-store");
+  res.status(403).json({ ok: false, error: message, requiredScopes });
+}
 
-    if (!config.apiToken && config.nodeEnv !== "production" && isLoopbackHost(config.host)) {
+export function createRemoteAuth(rateLimiter: AuthFailureRateLimiter, options: RemoteAuthOptions = {}) {
+  const config = options.config ?? loadConfig();
+  const verifyAccessToken = options.verifyAccessToken ?? (
+    config.auth0Issuer && config.auth0Audience ? createAuth0AccessTokenVerifier(config) : null
+  );
+
+  return async function requireRemoteAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    if (!verifyAccessToken && config.nodeEnv !== "production" && isLoopbackHost(config.host)) {
       res.locals.hermesClient = {
         id: null,
         keyId: "local-development",
@@ -160,39 +156,88 @@ export function createRemoteAuth(rateLimiter: AuthFailureRateLimiter) {
         deviceName: "localhost",
         agentType: "local",
         canManageClients: true,
-        authentication: "local-development"
+        authentication: "local-development",
+        subject: "local-development",
+        scopes: [...LIFE_ARCHIVE_SCOPES],
+        permissions: [...LIFE_ARCHIVE_SCOPES]
       } satisfies AuthenticatedClient;
       next();
       return;
     }
 
+    const token = bearerToken(req);
+    if (!token || !verifyAccessToken) {
+      rejectInvalidAuthentication(req, res, rateLimiter, "Auth0 login is required.");
+      return;
+    }
+
     try {
-      const client = await authenticateToken(
-        bearerToken(req),
-        config,
-        (keyId) => repository.findActiveByKeyId(keyId)
-      );
-      if (!client) {
-        rejectInvalidAuthentication(req, res, rateLimiter, "Missing or invalid bearer token.");
+      const client = await verifyAccessToken(token);
+      if (!hasAllScopes(client, [LIFE_ARCHIVE_READ_SCOPE])) {
+        rejectInsufficientAuthorization(
+          res,
+          config,
+          [LIFE_ARCHIVE_READ_SCOPE],
+          "Life Archive read permission is required."
+        );
         return;
       }
       res.locals.hermesClient = client;
-      if (client.id) {
-        repository.touch(client.id).catch((error: unknown) => {
-          console.error(JSON.stringify({ level: "error", event: "mcp_client_touch_failed", error: String(error) }));
-        });
+      if (client.authInfo) {
+        (req as express.Request & { auth?: typeof client.authInfo }).auth = client.authInfo;
       }
       next();
     } catch (error) {
+      if (error instanceof AuthorizationError) {
+        if (error.status === 403) {
+          rejectInsufficientAuthorization(res, config, [LIFE_ARCHIVE_READ_SCOPE], error.message);
+          return;
+        }
+        rejectInvalidAuthentication(req, res, rateLimiter, error.message);
+        return;
+      }
       next(error);
     }
   };
 }
 
-export function requireClientManager(_req: express.Request, res: express.Response, next: express.NextFunction) {
-  const client = res.locals.hermesClient as AuthenticatedClient | undefined;
-  if (!client?.canManageClients) {
-    res.status(403).json({ ok: false, error: "This client cannot manage MCP client keys." });
+export function requireScopes(requiredScopes: readonly string[]) {
+  return function requireOAuthScopes(
+    _req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) {
+    const config = loadConfig();
+    const client = res.locals.hermesClient as AuthenticatedClient | undefined;
+    if (!client || !hasAllScopes(client, requiredScopes)) {
+      rejectInsufficientAuthorization(
+        res,
+        config,
+        requiredScopes,
+        `Missing required Auth0 permission: ${requiredScopes.join(", ")}.`
+      );
+      return;
+    }
+    next();
+  };
+}
+
+export const requireLifeArchiveAdmin = requireScopes([LIFE_ARCHIVE_ADMIN_SCOPE]);
+
+const writeMcpTools = new Set(["capture_event", "link_source"]);
+
+function requestsWriteMcpTool(body: unknown): boolean {
+  if (Array.isArray(body)) return body.some(requestsWriteMcpTool);
+  if (!body || typeof body !== "object") return false;
+  const message = body as { method?: unknown; params?: { name?: unknown } };
+  return message.method === "tools/call" &&
+    typeof message.params?.name === "string" &&
+    writeMcpTools.has(message.params.name);
+}
+
+export function requireMcpToolScope(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (requestsWriteMcpTool(req.body)) {
+    requireScopes([LIFE_ARCHIVE_WRITE_SCOPE])(req, res, next);
     return;
   }
   next();
