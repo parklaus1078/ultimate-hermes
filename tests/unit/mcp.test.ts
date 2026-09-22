@@ -198,6 +198,7 @@ describe.sequential("Life Archive MCP server", () => {
   it("publishes OAuth discovery and enforces write scope", async () => {
     process.env.NODE_ENV = "test";
     process.env.HERMES_HOST = "127.0.0.1";
+    process.env.HERMES_PUBLIC_BASE_URL = "https://life-archive.example.com";
     process.env.LIFE_ARCHIVE_AUTH0_ISSUER = "https://life-archive-test.us.auth0.com/";
     process.env.LIFE_ARCHIVE_AUTH0_AUDIENCE = "https://life-archive.example.com/mcp";
     const listener = createApp({ verifyAccessToken: verifyReadOnlyToken }).listen(0, "127.0.0.1");
@@ -211,13 +212,43 @@ describe.sequential("Life Archive MCP server", () => {
       const metadataBody = await metadata.json() as { scopes_supported?: string[] };
       expect(metadataBody).toMatchObject({
         resource: "https://life-archive.example.com/mcp",
-        authorization_servers: ["https://life-archive-test.us.auth0.com/"],
+        authorization_servers: ["https://life-archive.example.com"],
         scopes_supported: expect.arrayContaining([
           LIFE_ARCHIVE_READ_SCOPE,
           LIFE_ARCHIVE_WRITE_SCOPE
         ])
       });
       expect(metadataBody.scopes_supported).not.toContain("offline_access");
+
+      const authorizationMetadata = await fetch(`${baseUrl}/.well-known/oauth-authorization-server`);
+      expect(authorizationMetadata.status).toBe(200);
+      const authorizationBody = await authorizationMetadata.json() as {
+        issuer: string;
+        authorization_endpoint: string;
+        token_endpoint: string;
+        registration_endpoint: string;
+        authorization_response_iss_parameter_supported?: boolean;
+        scopes_supported: string[];
+      };
+      expect(authorizationBody).toMatchObject({
+        issuer: "https://life-archive.example.com",
+        token_endpoint: "https://life-archive-test.us.auth0.com/oauth/token",
+        registration_endpoint: "https://life-archive-test.us.auth0.com/oidc/register",
+        authorization_response_iss_parameter_supported: false,
+        scopes_supported: expect.arrayContaining([
+          LIFE_ARCHIVE_READ_SCOPE,
+          LIFE_ARCHIVE_WRITE_SCOPE,
+          LIFE_ARCHIVE_ADMIN_SCOPE,
+          "offline_access"
+        ])
+      });
+      const authorizationUrl = new URL(authorizationBody.authorization_endpoint);
+      expect(`${authorizationUrl.origin}${authorizationUrl.pathname}`).toBe(
+        "https://life-archive-test.us.auth0.com/authorize"
+      );
+      expect(authorizationUrl.searchParams.get("audience")).toBe(
+        "https://life-archive.example.com/mcp"
+      );
 
       const deniedWrite = await fetch(`${baseUrl}/mcp`, {
         method: "POST",
