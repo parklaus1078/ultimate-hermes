@@ -57,6 +57,7 @@ export function requireAllowedRemoteOrigin(req: express.Request, res: express.Re
   const config = loadConfig();
   const hostname = req.hostname.toLowerCase();
   if (!config.allowedHosts.some((allowed) => allowed.toLowerCase() === hostname)) {
+    logAuthorizationRejection(req, "host_not_allowed");
     res.status(403).json({ ok: false, error: "Host is not allowed." });
     return;
   }
@@ -68,6 +69,7 @@ export function requireAllowedRemoteOrigin(req: express.Request, res: express.Re
   }
 
   if (!config.allowedOrigins.includes(origin)) {
+    logAuthorizationRejection(req, "origin_not_allowed");
     res.status(403).json({ ok: false, error: "Origin is not allowed." });
     return;
   }
@@ -90,6 +92,19 @@ function logAuthFailure(req: express.Request, event: "mcp_auth_rejected" | "mcp_
     sourceIp: requestAddresses(req).sourceIp ?? "unknown",
     failures,
     userAgent: boundedHeader(req, "user-agent", 500)
+  }));
+}
+
+function logAuthorizationRejection(req: express.Request, reason: string, grantedScopeCount?: number): void {
+  console.warn(JSON.stringify({
+    level: "warn",
+    event: "mcp_authorization_rejected",
+    reason,
+    method: req.method.slice(0, 16),
+    path: req.path.slice(0, 300),
+    sourceIp: requestAddresses(req).sourceIp ?? "unknown",
+    userAgent: boundedHeader(req, "user-agent", 500),
+    ...(grantedScopeCount === undefined ? {} : { grantedScopeCount })
   }));
 }
 
@@ -128,11 +143,15 @@ export function rejectInvalidAuthentication(
 }
 
 function rejectInsufficientAuthorization(
+  req: express.Request,
   res: express.Response,
   config: Pick<AppConfig, "publicBaseUrl">,
   requiredScopes: readonly string[],
-  message: string
+  message: string,
+  grantedScopeCount?: number
 ): void {
+  const client = res.locals.hermesClient as AuthenticatedClient | undefined;
+  logAuthorizationRejection(req, "insufficient_scope", grantedScopeCount ?? client?.scopes.length);
   res.setHeader(
     "WWW-Authenticate",
     authorizationChallenge(config, requiredScopes.join(" "), "insufficient_scope", message)
@@ -175,10 +194,12 @@ export function createRemoteAuth(rateLimiter: AuthFailureRateLimiter, options: R
       const client = await verifyAccessToken(token);
       if (!hasAllScopes(client, [LIFE_ARCHIVE_READ_SCOPE])) {
         rejectInsufficientAuthorization(
+          req,
           res,
           config,
           [LIFE_ARCHIVE_READ_SCOPE],
-          "Life Archive read permission is required."
+          "Life Archive read permission is required.",
+          client.scopes.length
         );
         return;
       }
@@ -190,7 +211,7 @@ export function createRemoteAuth(rateLimiter: AuthFailureRateLimiter, options: R
     } catch (error) {
       if (error instanceof AuthorizationError) {
         if (error.status === 403) {
-          rejectInsufficientAuthorization(res, config, [LIFE_ARCHIVE_READ_SCOPE], error.message);
+          rejectInsufficientAuthorization(req, res, config, [LIFE_ARCHIVE_READ_SCOPE], error.message);
           return;
         }
         rejectInvalidAuthentication(req, res, rateLimiter, error.message);
@@ -203,7 +224,7 @@ export function createRemoteAuth(rateLimiter: AuthFailureRateLimiter, options: R
 
 export function requireScopes(requiredScopes: readonly string[]) {
   return function requireOAuthScopes(
-    _req: express.Request,
+    req: express.Request,
     res: express.Response,
     next: express.NextFunction
   ) {
@@ -211,6 +232,7 @@ export function requireScopes(requiredScopes: readonly string[]) {
     const client = res.locals.hermesClient as AuthenticatedClient | undefined;
     if (!client || !hasAllScopes(client, requiredScopes)) {
       rejectInsufficientAuthorization(
+        req,
         res,
         config,
         requiredScopes,
