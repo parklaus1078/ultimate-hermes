@@ -103,8 +103,15 @@ Auth0가 callback URL, PKCE, grant type이 맞는 third-party Application을 만
 6. **Save**가 보이면 누릅니다.
 
 이 세 설정은 ChatGPT/Codex가 보내는 CIMD client ID와 `resource=MCP_URL`을 Auth0가
-올바르게 이해하고, 고정된 안전한 callback URL을 쓰게 해 줍니다. DCR은 이번 버전에서
-켜지 않습니다.
+올바르게 이해하게 해 줍니다. Life Archive의 Auth0 호환 discovery를 거치는 client는
+callback별 CIMD/redirect URL을 사용할 수 있으므로 ChatGPT 화면에 표시된 값을 그대로
+사용합니다. DCR은 이번 버전에서 켜지 않습니다.
+
+Life Archive 서버는 Auth0 호환용 OAuth discovery도 함께 제공합니다. 이 discovery의
+`authorization_endpoint`에는 API Identifier가 `audience=MCP_URL`로 고정되어 있습니다.
+따라서 ChatGPT가 표준 `resource`만 보내더라도 Auth0가 `/userinfo`용 opaque token이 아니라
+Life Archive API용 RS256 JWT를 발급합니다. 이 동작을 위해 별도 Render 환경 변수나 Client
+Secret은 필요하지 않습니다.
 
 ## 3. 로그인할 사람 만들기
 
@@ -219,9 +226,9 @@ redirect URL을 사용하는 것입니다.
 7. 화면에 표시되는 **Client ID Metadata Document URL**과 **Redirect URL**을 메모합니다.
 8. Auth0로 돌아가 **Applications → Applications → Create Application → Import from URL**을
    누릅니다.
-9. ChatGPT가 보여 준 CIMD URL을 붙여 넣습니다. issuer 설정이 올바르면 보통
-   `https://chatgpt.com/oauth/client.json`입니다. 화면이 다른 URL을 보여 주면 화면의 값을
-   사용합니다.
+9. ChatGPT가 보여 준 CIMD URL을 붙여 넣습니다. `https://chatgpt.com/oauth/client.json`일
+   수도 있고 callback ID가 포함된 URL일 수도 있습니다. 손으로 추측하지 말고 화면의 전체
+   값을 그대로 사용합니다.
 10. **Preview**를 누릅니다.
 11. 빨간 validation error가 없으면 **Create**를 누릅니다.
 
@@ -338,6 +345,7 @@ export LIFE_ARCHIVE_BASE_URL="https://YOUR-LIFE-ARCHIVE.onrender.com"
 curl -fsS "$LIFE_ARCHIVE_BASE_URL/api/v1/health"
 curl -fsS "$LIFE_ARCHIVE_BASE_URL/api/v1/ready"
 curl -fsS "$LIFE_ARCHIVE_BASE_URL/.well-known/oauth-protected-resource"
+curl -fsS "$LIFE_ARCHIVE_BASE_URL/.well-known/oauth-authorization-server"
 curl -i -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
   -H 'Content-Type: application/json' \
   --data '{}'
@@ -352,6 +360,8 @@ curl -fsS -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
 - health 응답에 `"ok":true`가 보입니다.
 - ready 응답에 `"database":"ready"`가 보입니다.
 - OAuth metadata의 `resource`가 정확한 `MCP_URL`입니다.
+- protected-resource metadata의 `authorization_servers`는 `BASE_URL`이고, authorization-server
+  metadata의 `authorization_endpoint`에는 정확한 `audience=MCP_URL`이 들어 있습니다.
 - token 없는 `/mcp` 요청은 일부러 `401`을 반환합니다.
 - `401` 응답의 `WWW-Authenticate`에 `resource_metadata=`가 있습니다.
 - 로그인하지 않은 `tools/list`에는 도구 이름과 최상위 `securitySchemes`가 보이지만 기억 데이터는 나오지 않습니다.
@@ -377,6 +387,10 @@ ChatGPT에서 계정 연결이 완료된 뒤에는 새 대화를 열고 입력�
 - Render 로그에서 `mcp_authorization_rejected`를 찾습니다. `insufficient_scope`와
   `grantedScopeCount:0`이면 새로 연결하면서 권한을 다시 승인해야 합니다.
   `origin_not_allowed`면 `HERMES_ALLOWED_ORIGINS` 설정을 확인합니다.
+- `auth0_jwt_verify_failed`의 `tokenShape.segments`가 `1`이면 Auth0의 opaque token입니다.
+  위 10단계의 authorization-server metadata를 열어 `authorization_endpoint`에
+  `audience=MCP_URL`이 들어 있는지 확인한 뒤, ChatGPT의 기존 Life Archive 계정 연결을
+  끊고 다시 연결합니다. 서버는 opaque token을 API token으로 받아들이지 않습니다.
 - 서버 수정 후에도 이전 연결 시도를 재사용한다면 ChatGPT에서 해당 Life Archive 연결을
   끊고 다시 연결합니다. 기존 access token에 새 scope가 자동 추가되지는 않습니다.
 
@@ -437,7 +451,8 @@ OAuth refresh token은 만료되어 새 authorization flow가 시작된 상태�
 
 ## 공식 참고 문서
 
-- [OpenAI MCP authentication](https://developers.openai.com/plugins/build/auth)
+- [OpenAI Apps SDK MCP authentication](https://developers.openai.com/apps-sdk/build/auth)
+- [Auth0: MCP client의 `resource`를 API `audience`에 연결하기](https://auth0.com/blog/adding-ui-auth0-secured-mcp-server-skybridge/#why-auth0-needs-one-extra-step)
 - [Auth0: ChatGPT에서 원격 MCP 연결 후 대화에 추가하기](https://auth0.com/blog/add-remote-mcp-server-chatgpt/#Step-4--Interact-with-Your-Remote-MCP-Server-in-a-Conversation)
 - [Codex MCP OAuth client registration](https://learn.chatgpt.com/docs/extend/mcp#oauth-client-registration)
 - [Auth0 manual CIMD registration](https://auth0.com/docs/get-started/auth0-overview/create-applications/register-applications-with-cimd)
