@@ -126,6 +126,13 @@ describe.sequential("Life Archive MCP server", () => {
       expect(discovery.status).toBe(200);
       expect(await discovery.json()).toMatchObject({ result: { serverInfo: { name: "life-archive" } } });
 
+      const initialized = await fetch(url, {
+        method: "POST",
+        headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })
+      });
+      expect(initialized.status).toBe(202);
+
       const unauthorized = await fetch(url, {
         method: "POST",
         headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },

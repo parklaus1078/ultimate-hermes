@@ -34,7 +34,9 @@ function isPublicMcpDiscovery(body: unknown): boolean {
   if (!body || typeof body !== "object" || Array.isArray(body)) return false;
   const request = body as { jsonrpc?: unknown; method?: unknown };
   return request.jsonrpc === "2.0" &&
-    (request.method === "initialize" || request.method === "tools/list");
+    (request.method === "initialize" ||
+      request.method === "notifications/initialized" ||
+      request.method === "tools/list");
 }
 
 export function buildProtectedResourceMetadata(
