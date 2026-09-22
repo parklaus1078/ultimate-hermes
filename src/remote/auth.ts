@@ -83,12 +83,33 @@ function sendRateLimited(res: express.Response, retryAfterSeconds: number): void
   res.status(429).json({ ok: false, error: "Too many failed authentication attempts. Retry later." });
 }
 
+function mcpOperation(body: unknown): string {
+  if (Array.isArray(body)) return "batch";
+  if (!body || typeof body !== "object") return "unknown";
+  const method = (body as { method?: unknown }).method;
+  switch (method) {
+    case "initialize":
+    case "notifications/initialized":
+    case "ping":
+    case "tools/list":
+    case "tools/call":
+    case "resources/list":
+    case "resources/templates/list":
+    case "prompts/list":
+      return method;
+    default:
+      return "other";
+  }
+}
+
 function logAuthFailure(req: express.Request, event: "mcp_auth_rejected" | "mcp_auth_rate_limited", failures: number): void {
   console.warn(JSON.stringify({
     level: "warn",
     event,
     method: req.method.slice(0, 16),
     path: req.path.slice(0, 300),
+    operation: mcpOperation(req.body),
+    authorizationPresent: Boolean(req.header("authorization")),
     sourceIp: requestAddresses(req).sourceIp ?? "unknown",
     failures,
     userAgent: boundedHeader(req, "user-agent", 500)
