@@ -136,7 +136,12 @@ export async function verifyAuth0AccessToken(
       audience,
       clockTolerance: config.auth0ClockToleranceSeconds
     }));
-  } catch {
+  } catch (error) {
+    console.warn(JSON.stringify({
+      level: "warn",
+      event: "auth0_jwt_verify_failed",
+      reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)
+    }));
     throw new AuthorizationError("Invalid or expired Auth0 access token.");
   }
 
