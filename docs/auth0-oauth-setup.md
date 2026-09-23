@@ -275,32 +275,36 @@ codex mcp login life-archive \
 ```
 
 처음에는 Auth0에 Codex의 CIMD client가 아직 없어서 `invalid_client`가 나오는 것이
-정상입니다. 실패 로그에서 정확한 CIMD URL을 얻은 뒤, 두 번째 Auth0 Application을 다음
-순서로 딱 한 번 만듭니다. Codex도 일반 Application type을 직접 선택하지 않습니다.
+정상입니다. Life Archive가 실제 Auth0 issuer를 표준 방식으로 광고하면 현재 Codex CLI는
+다음 안정형 CIMD URL을 사용합니다.
+
+```text
+https://chatgpt.com/oauth/codex/client.json
+```
+
+이 URL로 두 번째 Auth0 Application을 다음 순서로 딱 한 번 만듭니다. Codex도 일반
+Application type을 직접 선택하지 않습니다.
 
 1. Codex가 출력하거나 브라우저 주소의 `client_id=`에 넣은 CIMD URL을 복사합니다.
 2. 찾기 어렵다면 Auth0의 **Monitoring → Logs**에서 방금 실패한 기록을 열고 상세 JSON의
    `client_id`를 복사합니다.
-3. 현재 Codex는 보통 다음 모양의 callback별 URL을 씁니다.
-
-```text
-https://chatgpt.com/oauth/codex/<callback_id>/client.json
-```
-
-4. `<callback_id>`를 손으로 만들지 말고 Codex/Auth0 log가 보여 준 전체 URL을 그대로
-   복사합니다.
+3. `client_id`가 정확히 `https://chatgpt.com/oauth/codex/client.json`인지 확인합니다.
+4. callback별 `https://chatgpt.com/oauth/codex/<callback_id>/client.json`이 보인다면 서버가
+   아직 MCP origin을 authorization server로 광고하는 예전 버전일 수 있습니다. 먼저
+   10단계에서 `authorization_servers`가 실제 Auth0 issuer인지 확인합니다.
 5. Auth0의 **Applications → Applications → Create Application → Import from URL**을 엽니다.
 6. 복사한 URL을 붙여 넣고 **Preview → Create**를 누릅니다.
 
 생성이 끝나면 **Applications → Applications** 목록에 Codex용 third-party Application이
-생깁니다. 이 Application에도 ChatGPT Application과 다른 CIMD client ID가 자동으로 들어갑니다.
+생깁니다. External Client ID는 위 안정형 CIMD URL이고, callback은
+`http://127.0.0.1/callback`과 `http://localhost/callback`입니다.
 
 7. **Applications → APIs → Life Archive MCP → Application Access**에서 Codex application을
    찾습니다.
 8. **Edit → User-Delegated Access → Grant Access**를 켭니다.
 9. `memory:read`, `memory:write`, `memory:admin`을 선택하고 저장합니다.
-10. Codex application의 Refresh Token Rotation과 두 lifetime도 ChatGPT와 똑같이
-    `15552000`으로 설정합니다.
+10. Codex application의 Refresh Token Rotation을 켜고 maximum lifetime은 `15552000`,
+    idle lifetime은 `15551999`, overlap은 `60`초로 설정합니다.
 11. 기존 Codex 연결이 있었다면 `codex mcp logout life-archive`로 먼저 끊습니다.
 12. 위의 `codex mcp login` 명령을 다시 실행합니다.
 13. Auth0에서 로그인하고 동의합니다.
@@ -310,8 +314,20 @@ https://chatgpt.com/oauth/codex/<callback_id>/client.json
 codex mcp list
 ```
 
-Codex의 공용 stable CIMD인 `https://chatgpt.com/oauth/codex/client.json`은 공식 문서상 아직
-개발 중일 수 있습니다. 설치된 Codex가 실제로 그 URL을 보여 줄 때만 사용합니다.
+중요: Auth0의 authorization-server metadata에는 보통 OIDC scope만 보이므로 Codex가
+Life Archive의 `memory:*` scope를 자동으로 요청하지 못할 수 있습니다. 반드시 위 명령처럼
+`--scopes memory:read,memory:write,memory:admin,offline_access`를 명시합니다. 로그인이
+성공했는데 tool 호출이 `Insufficient scope`로 실패하면 다음 순서로 다시 로그인합니다.
+
+```bash
+codex mcp logout life-archive
+codex mcp login life-archive \
+  --scopes memory:read,memory:write,memory:admin,offline_access \
+  --oauth-client-registration cimd
+```
+
+브라우저로 열리는 `/authorize` URL의 `scope=`에도 세 `memory:*` scope와
+`offline_access`가 실제로 들어 있는지 확인합니다.
 
 ## 9. Render에 Auth0 값 넣기
 
@@ -414,6 +430,8 @@ ChatGPT에서 계정 연결이 완료된 뒤에는 새 대화를 열고 입력�
 - 사용자에게 `Life Archive Owner` Role을 붙였는지 봅니다.
 - access token의 `scope`에 요청한 `memory:*` scope가 들어오는지 봅니다. 서버는 더 넓은
   Auth0 `permissions` claim을 OAuth client에게 위임된 scope로 간주하지 않습니다.
+- Codex 로그인이 성공했는데 `Insufficient scope`가 나오면 8단계의 `--scopes` 명령으로
+  logout/login하고, Auth0 동의 화면에 세 `memory:*` 권한이 표시되는지 확인합니다.
 
 ### 로그인은 되었는데 MCP가 `401`을 반환함
 
