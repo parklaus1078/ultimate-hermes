@@ -96,22 +96,24 @@ Auth0가 callback URL, PKCE, grant type이 맞는 third-party Application을 만
 ### 2-3. Auth0를 MCP용으로 켜기
 
 1. Auth0 왼쪽 메뉴에서 **Settings**를 누릅니다.
-2. 화면 위쪽의 **Advanced** 탭을 누릅니다.
-3. 아래로 내려가 **Client ID Metadata Document Registration**을 켭니다.
-4. **Resource Parameter Compatibility Profile**을 켭니다.
-5. **Include Issuer in Authorization Responses**가 보이면 켭니다.
-6. **Save**가 보이면 누릅니다.
+2. **General → API Authorization Settings → Default Audience**에서 4단계에 만들 Life
+   Archive API의 Identifier인 `MCP_URL`을 선택합니다.
+3. 화면 위쪽의 **Advanced** 탭을 누릅니다.
+4. 아래로 내려가 **Client ID Metadata Document Registration**을 켭니다.
+5. **Resource Parameter Compatibility Profile**을 켭니다.
+6. **Include Issuer in Authorization Responses**가 보이면 켭니다.
+7. **Save**가 보이면 누릅니다.
 
 이 세 설정은 ChatGPT/Codex가 보내는 CIMD client ID와 `resource=MCP_URL`을 Auth0가
-올바르게 이해하게 해 줍니다. Life Archive의 Auth0 호환 discovery를 거치는 client는
-callback별 CIMD/redirect URL을 사용할 수 있으므로 ChatGPT 화면에 표시된 값을 그대로
-사용합니다. DCR은 이번 버전에서 켜지 않습니다.
+올바르게 이해하게 해 줍니다. `Default Audience`는 Auth0가 `audience`를 생략한 표준 MCP
+요청에도 `/userinfo`용 opaque token이 아니라 Life Archive API용 RS256 JWT를 발급하도록
+합니다. 이 테넌트의 모든 새 authorization 요청에 적용되므로 Life Archive 전용 Auth0
+테넌트에서만 사용하세요. DCR은 이번 버전에서 켜지 않습니다.
 
-Life Archive 서버는 Auth0 호환용 OAuth discovery도 함께 제공합니다. 이 discovery의
-`authorization_endpoint`에는 API Identifier가 `audience=MCP_URL`로 고정되어 있습니다.
-따라서 ChatGPT가 표준 `resource`만 보내더라도 Auth0가 `/userinfo`용 opaque token이 아니라
-Life Archive API용 RS256 JWT를 발급합니다. 이 동작을 위해 별도 Render 환경 변수나 Client
-Secret은 필요하지 않습니다.
+Life Archive 서버의 protected-resource metadata는 실제 Auth0 issuer를
+`authorization_servers`에 그대로 광고합니다. Auth0의 discovery `issuer`와 authorization
+response의 `iss`가 정확히 같아야 ChatGPT/Codex의 OAuth mix-up 방어를 통과합니다. 별도
+Client Secret은 필요하지 않습니다.
 
 ## 3. 로그인할 사람 만들기
 
@@ -345,7 +347,6 @@ export LIFE_ARCHIVE_BASE_URL="https://YOUR-LIFE-ARCHIVE.onrender.com"
 curl -fsS "$LIFE_ARCHIVE_BASE_URL/api/v1/health"
 curl -fsS "$LIFE_ARCHIVE_BASE_URL/api/v1/ready"
 curl -fsS "$LIFE_ARCHIVE_BASE_URL/.well-known/oauth-protected-resource"
-curl -fsS "$LIFE_ARCHIVE_BASE_URL/.well-known/oauth-authorization-server"
 curl -i -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
   -H 'Content-Type: application/json' \
   --data '{}'
@@ -360,8 +361,10 @@ curl -fsS -X POST "$LIFE_ARCHIVE_BASE_URL/mcp" \
 - health 응답에 `"ok":true`가 보입니다.
 - ready 응답에 `"database":"ready"`가 보입니다.
 - OAuth metadata의 `resource`가 정확한 `MCP_URL`입니다.
-- protected-resource metadata의 `authorization_servers`는 `BASE_URL`이고, authorization-server
-  metadata의 `authorization_endpoint`에는 정확한 `audience=MCP_URL`이 들어 있습니다.
+- protected-resource metadata의 `authorization_servers`는 Auth0 Domain과 정확히 같은
+  `https://YOUR_TENANT.REGION.auth0.com/`입니다. 끝의 `/`도 Auth0 discovery의 `issuer`와
+  일치해야 합니다.
+- Auth0 **Settings → General → Default Audience**가 정확한 `MCP_URL`입니다.
 - token 없는 `/mcp` 요청은 일부러 `401`을 반환합니다.
 - `401` 응답의 `WWW-Authenticate`에 `resource_metadata=`가 있습니다.
 - 로그인하지 않은 `tools/list`에는 도구 이름과 최상위 `securitySchemes`가 보이지만 기억 데이터는 나오지 않습니다.
@@ -388,9 +391,13 @@ ChatGPT에서 계정 연결이 완료된 뒤에는 새 대화를 열고 입력�
   `grantedScopeCount:0`이면 새로 연결하면서 권한을 다시 승인해야 합니다.
   `origin_not_allowed`면 `HERMES_ALLOWED_ORIGINS` 설정을 확인합니다.
 - `auth0_jwt_verify_failed`의 `tokenShape.segments`가 `1`이면 Auth0의 opaque token입니다.
-  위 10단계의 authorization-server metadata를 열어 `authorization_endpoint`에
-  `audience=MCP_URL`이 들어 있는지 확인한 뒤, ChatGPT의 기존 Life Archive 계정 연결을
-  끊고 다시 연결합니다. 서버는 opaque token을 API token으로 받아들이지 않습니다.
+  Auth0 **Settings → General → Default Audience**가 `MCP_URL`인지 확인한 뒤, ChatGPT의
+  기존 Life Archive 계정 연결을 끊고 다시 연결합니다. 서버는 opaque token을 API token으로
+  받아들이지 않습니다.
+- `Authorization server issuer mismatch`가 뜨면 protected-resource metadata의
+  `authorization_servers`가 실제 Auth0 discovery의 `issuer`와 글자 단위로 같은지 확인합니다.
+  MCP 서버 주소를 authorization server로 광고하면 Auth0가 반환한 `iss`와 달라 Codex가
+  callback을 거부합니다.
 - 서버 수정 후에도 이전 연결 시도를 재사용한다면 ChatGPT에서 해당 Life Archive 연결을
   끊고 다시 연결합니다. 기존 access token에 새 scope가 자동 추가되지는 않습니다.
 
@@ -438,6 +445,7 @@ OAuth refresh token은 만료되어 새 authorization flow가 시작된 상태�
 - [ ] CIMD, resource parameter, issuer response 설정을 켰다.
 - [ ] 로그인 connection을 Domain Level로 올렸다.
 - [ ] API Identifier가 정확한 `MCP_URL`이다.
+- [ ] Settings → General의 Default Audience가 정확한 `MCP_URL`이다.
 - [ ] RS256, 1시간 access token, offline access, RBAC를 켰다.
 - [ ] 세 권한과 Owner Role을 만들고 사용자에게 붙였다.
 - [ ] Auth0 브라우저 SSO session lifetime도 180일 이하로 두었다.

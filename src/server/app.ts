@@ -16,7 +16,6 @@ import {
   requireScopes
 } from "../remote/auth.js";
 import {
-  LIFE_ARCHIVE_OFFLINE_SCOPE,
   LIFE_ARCHIVE_SCOPES,
   LIFE_ARCHIVE_WRITE_SCOPE,
   type AccessTokenVerifier
@@ -46,34 +45,9 @@ export function buildProtectedResourceMetadata(
   if (!config.auth0Audience || !config.auth0Issuer) return null;
   return {
     resource: config.auth0Audience,
-    authorization_servers: [config.publicBaseUrl.replace(/\/$/, "")],
+    authorization_servers: [config.auth0Issuer],
     scopes_supported: [...LIFE_ARCHIVE_SCOPES],
     resource_name: "Life Archive MCP"
-  };
-}
-
-export function buildAuthorizationServerMetadata(
-  config: Pick<AppConfig, "auth0Audience" | "auth0Issuer" | "publicBaseUrl">
-) {
-  if (!config.auth0Audience || !config.auth0Issuer) return null;
-
-  const authorizationEndpoint = new URL("authorize", config.auth0Issuer);
-  authorizationEndpoint.searchParams.set("audience", config.auth0Audience);
-
-  return {
-    issuer: config.publicBaseUrl.replace(/\/$/, ""),
-    authorization_endpoint: authorizationEndpoint.toString(),
-    token_endpoint: new URL("oauth/token", config.auth0Issuer).toString(),
-    registration_endpoint: new URL("oidc/register", config.auth0Issuer).toString(),
-    revocation_endpoint: new URL("oauth/revoke", config.auth0Issuer).toString(),
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
-    client_id_metadata_document_supported: true,
-    // Auth0 returns its own issuer in authorization responses, not this compatibility issuer.
-    authorization_response_iss_parameter_supported: false,
-    scopes_supported: [...LIFE_ARCHIVE_SCOPES, LIFE_ARCHIVE_OFFLINE_SCOPE]
   };
 }
 
@@ -133,20 +107,8 @@ export function createApp(options: CreateAppOptions = {}) {
     res.json(metadata);
   };
 
-  const sendAuthorizationServerMetadata: express.RequestHandler = (_req, res) => {
-    const metadata = buildAuthorizationServerMetadata(config);
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    if (!metadata) {
-      res.status(503).json({ ok: false, error: "Auth0 OAuth is not configured." });
-      return;
-    }
-    res.json(metadata);
-  };
-
   app.get("/.well-known/oauth-protected-resource", sendProtectedResourceMetadata);
   app.get("/.well-known/oauth-protected-resource/mcp", sendProtectedResourceMetadata);
-  app.get("/.well-known/oauth-authorization-server", sendAuthorizationServerMetadata);
 
   app.get("/", (_req, res) => {
     res.json({
@@ -154,7 +116,6 @@ export function createApp(options: CreateAppOptions = {}) {
       version,
       mcp: "/mcp",
       oauthProtectedResource: "/.well-known/oauth-protected-resource",
-      oauthAuthorizationServer: "/.well-known/oauth-authorization-server",
       health: "/api/v1/health",
       readiness: "/api/v1/ready"
     });
